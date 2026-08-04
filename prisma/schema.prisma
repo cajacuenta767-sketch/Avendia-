@@ -1,0 +1,235 @@
+// prisma/schema.prisma
+// AVEND ESCALA - MINEDU Evaluation Bank & Simulator Schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  passwordHash  String
+  fullName      String
+  dni           String?   @unique
+  role          String    @default("DOCENTE")
+  isActive      Boolean   @default(true)
+  emailVerified DateTime?
+
+  uploadedEvaluations Evaluation[]   @relation("UploadedBy")
+  downloadLogs        DownloadLog[]
+  examAttempts        ExamAttempt[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([email])
+  @@index([role])
+  @@index([dni])
+  @@map("users")
+}
+
+model Speciality {
+  id          String       @id @default(cuid())
+  name        String       @unique
+  slug        String       @unique
+  nivel       String       @default("SECUNDARIA")
+  evaluations Evaluation[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([nivel])
+  @@map("specialities")
+}
+
+model Evaluation {
+  id           String      @id @default(cuid())
+  title        String
+  mineduCode   String      @unique
+  proceso      String
+  modalidad    String      @default("EBR")
+  nivel        String
+  anio         Int
+  status       String      @default("PUBLISHED")
+  description  String?
+
+  cuadernilloR2Key String
+  clavesR2Key      String?
+  resolucionR2Key  String?
+
+  specialityId String
+  speciality   Speciality @relation(fields: [specialityId], references: [id], onDelete: Restrict)
+
+  createdById String
+  createdBy   User   @relation("UploadedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  downloadLogs DownloadLog[]
+  simulators   Simulator[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([proceso, modalidad, nivel, anio])
+  @@index([specialityId])
+  @@index([status])
+  @@index([anio])
+  @@map("evaluaciones_r2")
+}
+
+model DownloadLog {
+  id           String     @id @default(cuid())
+  userId       String
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  evaluationId String
+  evaluation   Evaluation @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+  resourceType String
+  ipAddress    String?
+  userAgent    String?
+  downloadedAt DateTime   @default(now())
+
+  @@index([userId])
+  @@index([evaluationId])
+  @@index([downloadedAt])
+  @@map("download_logs")
+}
+
+model Simulator {
+  id           String     @id @default(cuid())
+  title        String
+  timeLimitMin Int        @default(180)
+  passingScore Float      @default(110.0)
+  evaluationId String
+  evaluation   Evaluation @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+
+  questions Question[]
+  attempts  ExamAttempt[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([evaluationId])
+  @@map("simulators")
+}
+
+model Question {
+  id           String    @id @default(cuid())
+  simulatorId  String
+  simulator    Simulator @relation(fields: [simulatorId], references: [id], onDelete: Cascade)
+  order        Int
+  questionText String
+  imageUrl     String?
+  explanation  String?
+  points       Float     @default(2.0)
+
+  options Option[]
+  answers AnswerAttempt[]
+
+  @@index([simulatorId, order])
+  @@map("questions")
+}
+
+model Option {
+  id         String   @id @default(cuid())
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  letter     String
+  optionText String
+  isCorrect  Boolean  @default(false)
+
+  answers AnswerAttempt[]
+
+  @@index([questionId])
+  @@map("options")
+}
+
+model ExamAttempt {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  simulatorId String
+  simulator   Simulator @relation(fields: [simulatorId], references: [id], onDelete: Cascade)
+  score       Float     @default(0.0)
+  isCompleted Boolean   @default(false)
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
+
+  answers AnswerAttempt[]
+
+  @@index([userId])
+  @@index([simulatorId])
+  @@map("exam_attempts")
+}
+
+model AnswerAttempt {
+  id               String      @id @default(cuid())
+  examAttemptId    String
+  examAttempt      ExamAttempt @relation(fields: [examAttemptId], references: [id], onDelete: Cascade)
+  questionId       String
+  question         Question    @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  selectedOptionId String?
+  selectedOption   Option?     @relation(fields: [selectedOptionId], references: [id], onDelete: SetNull)
+  isCorrect        Boolean     @default(false)
+
+  @@unique([examAttemptId, questionId])
+  @@map("answer_attempts")
+}
+
+model Recurso {
+  id          String   @id @default(cuid())
+  titulo      String
+  categoria   String?
+  urlImagen   String?
+  urlPdf      String?
+  r2ImageKey  String?
+  r2PdfKey    String?
+  estado      String   @default("PUBLICADO")
+  colorHeader String   @default("indigo")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("recursos")
+}
+
+model Evaluacion {
+  id             String   @id @default(cuid())
+  titulo         String   @default("Evaluación MINEDU")
+  proceso        String
+  modalidad      String
+  nivel          String
+  area           String
+  anio           String
+  urlCuadernillo String?
+  urlResolucion  String?
+  urlClaves      String?
+  esPremium      Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  @@map("evaluaciones")
+}
+
+model AnioClasificacion {
+  id   String @id @default(cuid())
+  anio String @unique
+
+  @@map("anios_clasificacion")
+}
+
+model UsuarioDocente {
+  id          String   @id @default(cuid())
+  dni         String   @unique
+  nombre      String
+  email       String   @unique
+  pin         String
+  rol         String   @default("DOCENTE")
+  fechaInicio DateTime @default(now())
+  fechaFin    DateTime
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("usuarios_docentes")
+}
