@@ -130,7 +130,7 @@ export default function CuadernillosPage() {
     <main className="min-h-screen bg-slate-50 dark:bg-slate-950">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
         <ProcessSelector
-          selectedProceso={filters.proceso || 'NOMBRAMIENTO_DOCENTE'}
+          selectedProceso={(filters.proceso && filters.proceso !== 'TODOS' ? filters.proceso : 'NOMBRAMIENTO_DOCENTE') as ProcesoMinedu}
           onSelectProceso={handleSelectProceso}
         />
 
@@ -144,7 +144,7 @@ export default function CuadernillosPage() {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-xl font-extrabold text-slate-900 dark:text-white tracking-tight">
-              {PROCESO_TITULOS[filters.proceso || 'NOMBRAMIENTO_DOCENTE']}
+              {PROCESO_TITULOS[(filters.proceso && filters.proceso !== 'TODOS' ? filters.proceso : 'NOMBRAMIENTO_DOCENTE') as ProcesoMinedu]}
             </h2>
             <span className="text-xs font-semibold text-slate-500">
               {evaluaciones.length} resultados encontrados

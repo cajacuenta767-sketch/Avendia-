@@ -36,3 +36,5 @@ next-env.d.ts
 # prisma local db
 prisma/*.db
 prisma/*.db-journal
+
+.vercel

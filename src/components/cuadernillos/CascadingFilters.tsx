@@ -13,6 +13,7 @@ interface CascadingFiltersProps {
   filters: EvaluacionesFilterParams;
   onFilterChange: (updatedFilters: EvaluacionesFilterParams) => void;
   onResetFilters: () => void;
+  resultsCount?: number;
 }
 
 const MODALIDADES: { value: ModalidadEducativa | 'TODOS'; label: string }[] = [

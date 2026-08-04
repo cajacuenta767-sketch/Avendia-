@@ -21,6 +21,7 @@ export interface Recurso {
   paginas: number;
   formato: 'PDF' | 'INFOGRAFIA';
   urlPdf: string;                // Clave de R2 o URL del PDF
+  urlImagen?: string;            // Ruta de la imagen de portada
   isPopular?: boolean;
   status?: 'PUBLICADO' | 'OCULTO';
   tags: string[];
