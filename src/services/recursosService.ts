@@ -32,24 +32,29 @@ function saveBase64ToFile(base64Data: string, subfolder: string, prefix: string)
     return base64Data;
   }
 
-  const mimeType = matches[1];
-  const buffer = Buffer.from(matches[2], 'base64');
+  try {
+    const mimeType = matches[1];
+    const buffer = Buffer.from(matches[2], 'base64');
 
-  let ext = '.png';
-  if (mimeType.includes('jpeg') || mimeType.includes('jpg')) ext = '.jpg';
-  else if (mimeType.includes('webp')) ext = '.webp';
-  else if (mimeType.includes('pdf')) ext = '.pdf';
+    let ext = '.png';
+    if (mimeType.includes('jpeg') || mimeType.includes('jpg')) ext = '.jpg';
+    else if (mimeType.includes('webp')) ext = '.webp';
+    else if (mimeType.includes('pdf')) ext = '.pdf';
 
-  const uploadsDir = path.join(process.cwd(), 'public', 'uploads', subfolder);
-  if (!fs.existsSync(uploadsDir)) {
-    fs.mkdirSync(uploadsDir, { recursive: true });
+    const uploadsDir = path.join(process.cwd(), 'public', 'uploads', subfolder);
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir, { recursive: true });
+    }
+
+    const filename = `${prefix}-${Date.now()}${ext}`;
+    const fullPath = path.join(uploadsDir, filename);
+    fs.writeFileSync(fullPath, buffer);
+
+    return `/uploads/${subfolder}/${filename}`;
+  } catch {
+    console.log('⚡ [VERCEL SERVERLESS] Guardando Data URL en PostgreSQL.');
+    return base64Data;
   }
-
-  const filename = `${prefix}-${Date.now()}${ext}`;
-  const fullPath = path.join(uploadsDir, filename);
-  fs.writeFileSync(fullPath, buffer);
-
-  return `/uploads/${subfolder}/${filename}`;
 }
 
 export async function getRecursosAction(

@@ -29,17 +29,22 @@ function saveBase64ToFile(base64Data: string, subfolder: string, prefix: string)
     return base64Data;
   }
 
-  const buffer = Buffer.from(matches[2], 'base64');
-  const uploadsDir = path.join(process.cwd(), 'public', 'uploads', subfolder);
-  if (!fs.existsSync(uploadsDir)) {
-    fs.mkdirSync(uploadsDir, { recursive: true });
+  try {
+    const buffer = Buffer.from(matches[2], 'base64');
+    const uploadsDir = path.join(process.cwd(), 'public', 'uploads', subfolder);
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir, { recursive: true });
+    }
+
+    const filename = `${prefix}-${Date.now()}.pdf`;
+    const fullPath = path.join(uploadsDir, filename);
+    fs.writeFileSync(fullPath, buffer);
+
+    return `/uploads/${subfolder}/${filename}`;
+  } catch {
+    console.log('⚡ [VERCEL SERVERLESS] Guardando Data URL en PostgreSQL.');
+    return base64Data;
   }
-
-  const filename = `${prefix}-${Date.now()}.pdf`;
-  const fullPath = path.join(uploadsDir, filename);
-  fs.writeFileSync(fullPath, buffer);
-
-  return `/uploads/${subfolder}/${filename}`;
 }
 
 export async function getAniosAction(): Promise<ActionResponse<string[]>> {
