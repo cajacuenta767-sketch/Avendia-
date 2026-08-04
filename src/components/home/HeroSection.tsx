@@ -19,13 +19,13 @@ export const HeroSection: React.FC = () => {
 
       {/* Subtítulos de Concursos MINEDU */}
       <div className="flex flex-wrap gap-2 text-xs sm:text-sm font-extrabold uppercase tracking-wider">
-        <span className="px-3 py-1.5 rounded-lg bg-blue-600 text-white shadow-sm">
+        <span className="px-3 py-1.5 rounded-lg bg-purple-600 text-white shadow-sm transition-transform hover:scale-105">
           Nombramiento
         </span>
-        <span className="px-3 py-1.5 rounded-lg bg-indigo-600 text-white shadow-sm">
+        <span className="px-3 py-1.5 rounded-lg bg-blue-600 text-white shadow-sm transition-transform hover:scale-105">
           Ascenso de Escala
         </span>
-        <span className="px-3 py-1.5 rounded-lg bg-cyan-600 text-white shadow-sm">
+        <span className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white shadow-sm transition-transform hover:scale-105">
           Cargos Directivos
         </span>
       </div>
@@ -36,9 +36,12 @@ export const HeroSection: React.FC = () => {
       </p>
 
       {/* Ilustración / Elemento Gráfico Docente */}
-      <div className="p-4 rounded-2xl bg-blue-50/60 dark:bg-blue-950/40 border border-blue-100 dark:border-blue-900/60 flex items-center space-x-4">
-        <div className="w-12 h-12 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold text-xl shrink-0 shadow-md">
-          👨‍🏫
+      <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 flex items-center space-x-4">
+        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 text-white flex items-center justify-center font-bold text-xl shrink-0 shadow-md">
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14l9-5-9-5-9 5 9 5z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0112 20.055a11.952 11.952 0 01-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z" />
+          </svg>
         </div>
         <div className="text-xs text-blue-950 dark:text-blue-200">
           <p className="font-extrabold">Plataforma recomendada para docentes de todo el Perú</p>

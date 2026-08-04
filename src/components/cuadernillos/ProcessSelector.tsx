@@ -53,6 +53,36 @@ const PROCESS_ITEMS: ProcessOptionItem[] = [
   },
 ];
 
+const PROCESS_COLORS: Partial<Record<ProcesoMinedu, {
+  border: string;
+  bgSelected: string;
+  badgeSelected: string;
+  titleSelected: string;
+  ring: string;
+}>> = {
+  NOMBRAMIENTO_DOCENTE: {
+    border: 'border-purple-600',
+    bgSelected: 'bg-purple-50/70 dark:bg-purple-950/40',
+    badgeSelected: 'bg-purple-600 text-white',
+    titleSelected: 'text-purple-900 dark:text-purple-200',
+    ring: 'ring-purple-500/30',
+  },
+  ASCENSO_ESCALAFON: {
+    border: 'border-blue-600',
+    bgSelected: 'bg-blue-50/70 dark:bg-blue-950/40',
+    badgeSelected: 'bg-blue-600 text-white',
+    titleSelected: 'text-blue-900 dark:text-blue-200',
+    ring: 'ring-blue-500/30',
+  },
+  ACCESO_CARGOS_DIRECTIVOS: {
+    border: 'border-emerald-600',
+    bgSelected: 'bg-emerald-50/70 dark:bg-emerald-950/40',
+    badgeSelected: 'bg-emerald-600 text-white',
+    titleSelected: 'text-emerald-900 dark:text-emerald-200',
+    ring: 'ring-emerald-500/30',
+  },
+};
+
 export const ProcessSelector: React.FC<ProcessSelectorProps> = ({
   selectedProceso,
   onSelectProceso,
@@ -73,15 +103,23 @@ export const ProcessSelector: React.FC<ProcessSelectorProps> = ({
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {PROCESS_ITEMS.map((item) => {
           const isSelected = selectedProceso === item.id;
+          const colors = PROCESS_COLORS[item.id] ?? {
+            border: 'border-purple-600',
+            bgSelected: 'bg-purple-50/70 dark:bg-purple-950/40',
+            badgeSelected: 'bg-purple-600 text-white',
+            titleSelected: 'text-purple-900 dark:text-purple-200',
+            ring: 'ring-purple-500/30',
+          };
+
           return (
             <button
               key={item.id}
               type="button"
               onClick={() => onSelectProceso(item.id)}
-              className={`relative flex flex-col items-start p-5 rounded-2xl border-2 text-left transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50 ${
+              className={`relative flex flex-col items-start p-5 rounded-2xl border-2 text-left transition-all duration-200 focus:outline-none focus:ring-2 ${
                 isSelected
-                  ? 'border-blue-600 bg-blue-50/70 dark:bg-blue-950/40 shadow-md ring-1 ring-blue-500/30'
-                  : 'border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 hover:border-blue-300 dark:hover:border-blue-800 hover:shadow-sm'
+                  ? `${colors.border} ${colors.bgSelected} shadow-md ring-1 ${colors.ring}`
+                  : 'border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 hover:border-gray-300 dark:hover:border-gray-700 hover:shadow-sm'
               }`}
             >
               {/* Badge superior e Icono */}
@@ -89,7 +127,7 @@ export const ProcessSelector: React.FC<ProcessSelectorProps> = ({
                 <div
                   className={`p-2.5 rounded-xl ${
                     isSelected
-                      ? 'bg-blue-600 text-white'
+                      ? colors.badgeSelected
                       : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
                   }`}
                 >
@@ -98,7 +136,7 @@ export const ProcessSelector: React.FC<ProcessSelectorProps> = ({
                 <span
                   className={`text-xs font-semibold px-2.5 py-1 rounded-full ${
                     isSelected
-                      ? 'bg-blue-600 text-white'
+                      ? colors.badgeSelected
                       : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
                   }`}
                 >
@@ -110,7 +148,7 @@ export const ProcessSelector: React.FC<ProcessSelectorProps> = ({
               <h3
                 className={`text-lg font-bold mb-1 ${
                   isSelected
-                    ? 'text-blue-900 dark:text-blue-200'
+                    ? colors.titleSelected
                     : 'text-gray-900 dark:text-gray-100'
                 }`}
               >
@@ -122,7 +160,7 @@ export const ProcessSelector: React.FC<ProcessSelectorProps> = ({
 
               {/* Indicador Check Activo */}
               {isSelected && (
-                <div className="absolute top-3 right-3 flex items-center justify-center w-5 h-5 rounded-full bg-blue-600 text-white">
+                <div className={`absolute top-3 right-3 flex items-center justify-center w-5 h-5 rounded-full ${colors.badgeSelected}`}>
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                   </svg>
