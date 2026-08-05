@@ -232,8 +232,7 @@ function CuadernillosContent() {
   ) => {
     const sessionStr = localStorage.getItem('docente_session');
     if (!sessionStr) {
-      setPendingResource({ evaluationId, resourceType });
-      setIsAuthModalOpen(true);
+      router.push('/#login-form');
       return;
     }
 

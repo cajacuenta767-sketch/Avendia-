@@ -6,7 +6,6 @@ import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Logo } from '@/components/ui/Logo';
-import { DocenteAuthModal } from '@/components/auth/DocenteAuthModal';
 
 function getInitials(name: string): string {
   if (!name) return 'D';
@@ -20,7 +19,6 @@ export const Navbar: React.FC = () => {
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
 
   // Modal Mi Perfil
@@ -76,7 +74,14 @@ export const Navbar: React.FC = () => {
   const handleNavClick = (e: React.MouseEvent, targetPath: string) => {
     if (!docenteSession) {
       e.preventDefault();
-      setIsAuthModalOpen(true);
+      if (pathname === '/') {
+        const loginEl = document.getElementById('login-form');
+        if (loginEl) {
+          loginEl.scrollIntoView({ behavior: 'smooth' });
+          return;
+        }
+      }
+      router.push('/#login-form');
     }
   };
 
@@ -88,11 +93,6 @@ export const Navbar: React.FC = () => {
     router.push('/');
   };
 
-  const handleAuthSuccess = (docente: any) => {
-    setDocenteSession(docente);
-    window.dispatchEvent(new Event('docente_session_change'));
-  };
-
   const isHomePage = pathname === '/';
 
   return (
@@ -101,7 +101,7 @@ export const Navbar: React.FC = () => {
         {/* Logo oficial */}
         <Logo />
 
-        {/* Navegación Desktop Restringida sin credenciales */}
+        {/* Navegación Desktop Restringida -> Dirige al Formulario Unico del Inicio */}
         <nav className="hidden md:flex items-center space-x-2">
           <Link
             href="/cuadernillos"
@@ -131,7 +131,7 @@ export const Navbar: React.FC = () => {
               {!docenteSession ? (
                 <button
                   type="button"
-                  onClick={() => setIsAuthModalOpen(true)}
+                  onClick={() => router.push('/#login-form')}
                   className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 transition-colors flex items-center space-x-2 shadow-2xs cursor-pointer"
                 >
                   <svg className="w-4 h-4 text-white shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -307,12 +307,6 @@ export const Navbar: React.FC = () => {
         </div>,
         document.body
       )}
-
-      <DocenteAuthModal
-        isOpen={isAuthModalOpen}
-        onClose={() => setIsAuthModalOpen(false)}
-        onSuccess={handleAuthSuccess}
-      />
     </header>
   );
 };

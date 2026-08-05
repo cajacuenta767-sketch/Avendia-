@@ -87,8 +87,7 @@ export default function RecursosPage() {
   const handleOpenPdf = (recurso: Recurso) => {
     const session = localStorage.getItem('docente_session');
     if (!session) {
-      setPendingRecurso(recurso);
-      setIsAuthModalOpen(true);
+      router.push('/#login-form');
       return;
     }
     triggerOpenPdf(recurso);
