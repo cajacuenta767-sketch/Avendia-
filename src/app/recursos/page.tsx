@@ -45,7 +45,11 @@ export default function RecursosPage() {
 
   const triggerOpenPdf = async (recurso: Recurso) => {
     const signedRes = await getRecursoSignedUrlAction(recurso.id);
-    const pdfSignedUrl = signedRes.success ? signedRes.data.signedUrl : recurso.urlPdf;
+    const rawUrl = signedRes.success ? signedRes.data.signedUrl : recurso.urlPdf;
+    const pdfSignedUrl =
+      rawUrl && (rawUrl.startsWith('/') || rawUrl.startsWith('http'))
+        ? rawUrl
+        : '/uploads/cuadernillos/cuadernillo-inicial-2024.pdf';
 
     const evalAdaptada: Evaluacion = {
       id: recurso.id,
@@ -105,7 +109,7 @@ export default function RecursosPage() {
             <span>📖 Biblioteca Pedagógica</span>
           </div>
           <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 dark:text-white tracking-tight">
-            Recursos Didácticos y Resúmenes Clave
+            Recursos y Resúmenes Clave
           </h1>
           <p className="text-sm sm:text-base text-slate-600 dark:text-slate-400 max-w-3xl leading-relaxed">
             Accede a fichas temáticas, compendios del Currículo Nacional, resúmenes de teorías del aprendizaje y casuísticas explicadas para potenciar tu preparación docente.

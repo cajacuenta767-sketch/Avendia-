@@ -15,6 +15,7 @@ interface RecursoCardItem {
   id: string;
   number: number;
   title: string;
+  description: string;
   category: CategoriaRecurso;
   estado: 'PUBLICADO' | 'OCULTO';
   bgHeader: string;
@@ -43,7 +44,7 @@ export const RecursosAdminView: React.FC = () => {
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  // 1. Carga Inicial Local desde PostgreSQL (0 llamadas a la nube)
+  // 1. Carga Inicial Local desde PostgreSQL
   useEffect(() => {
     async function loadRecursos() {
       const res = await getRecursosAction();
@@ -52,6 +53,7 @@ export const RecursosAdminView: React.FC = () => {
           id: item.id,
           number: item.numero || idx + 1,
           title: item.titulo,
+          description: item.descripcion || 'Ficha de resumen pedagógico y nemotecnias para evaluaciones docentes.',
           category: item.categoria,
           estado: item.status || 'PUBLICADO',
           bgHeader: PASTEL_BG[idx % PASTEL_BG.length],
@@ -79,9 +81,11 @@ export const RecursosAdminView: React.FC = () => {
     const nextNumber = recursosList.length + 1;
     const bgHeader = PASTEL_BG[(nextNumber - 1) % PASTEL_BG.length];
     const defaultTitle = `Nuevo Recurso Nemotécnico ${nextNumber}`;
+    const defaultDesc = `Escribe aquí la descripción o resumen del contenido del recurso descargable ${nextNumber}.`;
 
     const res = await createRecursoAction({
       titulo: defaultTitle,
+      descripcion: defaultDesc,
       number: nextNumber,
       categoria: 'CASUISTICA_PEDAGOGICA',
       colorHeader: bgHeader.replace('bg-', '').replace('-400', ''),
@@ -94,6 +98,7 @@ export const RecursosAdminView: React.FC = () => {
         id: res.data.id,
         number: res.data.numero || nextNumber,
         title: res.data.titulo,
+        description: res.data.descripcion || defaultDesc,
         category: res.data.categoria,
         estado: 'PUBLICADO',
         bgHeader,
@@ -101,14 +106,14 @@ export const RecursosAdminView: React.FC = () => {
         imgStatus: 'IDLE',
         hasImageError: false,
       };
-      setRecursosList([nuevoItem, ...recursosList]);
+      setRecursosList([...recursosList, nuevoItem]);
       showToast('✨ Recurso creado en PostgreSQL local.');
     } else {
       showToast(`❌ ${res.error.message}`);
     }
   };
 
-  // 3. Editar título
+  // 3. Editar Título
   const handleTitleChange = (id: string, newTitle: string) => {
     setRecursosList((prev) => prev.map((r) => (r.id === id ? { ...r, title: newTitle } : r)));
   };
@@ -118,7 +123,16 @@ export const RecursosAdminView: React.FC = () => {
     await updateRecursoAction(id, { titulo: title.trim() });
   };
 
-  // 4. Subir Imagen Local (Base64 + Guardado en PostgreSQL local)
+  // 4. Editar Descripción (Nuevo Campo Solicitado)
+  const handleDescriptionChange = (id: string, newDesc: string) => {
+    setRecursosList((prev) => prev.map((r) => (r.id === id ? { ...r, description: newDesc } : r)));
+  };
+
+  const handleDescriptionBlur = async (id: string, description: string) => {
+    await updateRecursoAction(id, { descripcion: description.trim() });
+  };
+
+  // 5. Subir Imagen Local
   const handleSubirImagen = (id: string, file: File) => {
     const reader = new FileReader();
 
@@ -129,7 +143,6 @@ export const RecursosAdminView: React.FC = () => {
     reader.onload = async (e) => {
       const base64String = e.target?.result as string;
 
-      // Actualizar estado React instantáneamente
       setRecursosList((prev) =>
         prev.map((r) =>
           r.id === id
@@ -143,7 +156,6 @@ export const RecursosAdminView: React.FC = () => {
         )
       );
 
-      // Persistir Base64 en PostgreSQL local
       const updateRes = await updateRecursoAction(id, { urlImagen: base64String });
       if (updateRes.success) {
         showToast('✔ Imagen guardada en PostgreSQL local.');
@@ -155,7 +167,7 @@ export const RecursosAdminView: React.FC = () => {
     reader.readAsDataURL(file);
   };
 
-  // 5. Subir PDF Local (Base64 + PostgreSQL local)
+  // 6. Subir PDF Local
   const handleSubirPdf = (id: string, file: File) => {
     const reader = new FileReader();
 
@@ -181,14 +193,14 @@ export const RecursosAdminView: React.FC = () => {
     reader.readAsDataURL(file);
   };
 
-  // 6. Conmutar Visibilidad
+  // 7. Conmutar Visibilidad
   const handleToggleOcultar = async (id: string, estadoActual: 'PUBLICADO' | 'OCULTO') => {
     const nuevoEstado = estadoActual === 'PUBLICADO' ? 'OCULTO' : 'PUBLICADO';
     setRecursosList((prev) => prev.map((r) => (r.id === id ? { ...r, estado: nuevoEstado } : r)));
     await updateRecursoAction(id, { estado: nuevoEstado });
   };
 
-  // 7. Previsualizar PDF Local
+  // 8. Previsualizar PDF Local
   const handlePrevisualizar = async (rec: RecursoCardItem) => {
     if (!rec.urlPdf && rec.pdfStatus !== 'SUCCESS') {
       showToast('⚠️ Sube un archivo PDF antes de previsualizar');
@@ -203,7 +215,7 @@ export const RecursosAdminView: React.FC = () => {
     }
   };
 
-  // 8. Eliminar recurso
+  // 9. Eliminar recurso
   const confirmDeleteRecurso = async () => {
     if (!deleteModal.id) return;
     const targetId = deleteModal.id;
@@ -319,7 +331,20 @@ export const RecursosAdminView: React.FC = () => {
               />
             </div>
 
-            {/* Botones Medios */}
+            {/* Campo Descripción (Ubicación Exacta: Debajo de Título y antes de Subir Imagen/PDF) */}
+            <div>
+              <label className="block text-xs font-bold text-gray-500 mb-1">Descripción</label>
+              <textarea
+                rows={2}
+                value={rec.description}
+                onChange={(e) => handleDescriptionChange(rec.id, e.target.value)}
+                onBlur={(e) => handleDescriptionBlur(rec.id, e.target.value)}
+                placeholder="Escribe un resumen o explicación sobre este recurso PDF..."
+                className="w-full bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl p-3 text-xs font-medium text-gray-800 dark:text-white outline-none focus:border-indigo-500 resize-none transition-colors"
+              />
+            </div>
+
+            {/* Botones Medios: SUBIR IMAGEN y SUBIR PDF */}
             <div className="flex space-x-2">
               <label className="bg-gray-100 hover:bg-gray-200 dark:bg-slate-800 text-gray-700 dark:text-slate-300 font-bold text-xs rounded-xl py-2.5 px-3 w-1/2 text-center cursor-pointer transition-colors flex items-center justify-center">
                 <span>

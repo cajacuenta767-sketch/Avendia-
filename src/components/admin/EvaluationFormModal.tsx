@@ -24,6 +24,11 @@ export const EvaluationFormModal: React.FC<EvaluationFormModalProps> = ({
   const [especialidad, setEspecialidad] = useState('Matemática');
   const [anio, setAnio] = useState(2024);
 
+  // Orígenes Institucionales de Recursos
+  const [origenCuadernillo, setOrigenCuadernillo] = useState<'MINEDU' | 'AVEND'>('MINEDU');
+  const [origenResolucion, setOrigenResolucion] = useState<'AVEND' | 'MINEDU'>('AVEND');
+  const [origenClaves, setOrigenClaves] = useState<'MINEDU' | 'AVEND'>('MINEDU');
+
   // Archivos PDF y progreso de carga R2
   const [cuadernilloFile, setCuadernilloFile] = useState<File | null>(null);
   const [resolucionFile, setResolucionFile] = useState<File | null>(null);
@@ -106,6 +111,9 @@ export const EvaluationFormModal: React.FC<EvaluationFormModalProps> = ({
         cuadernilloKey,
         resolucionKey,
         clavesKey,
+        origenCuadernillo,
+        origenResolucion,
+        origenClaves,
       });
 
       setIsLoading(false);
@@ -127,7 +135,7 @@ export const EvaluationFormModal: React.FC<EvaluationFormModalProps> = ({
       <div className="relative w-full max-w-2xl bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 p-6 sm:p-8 shadow-2xl max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-5">
           <span className="px-3 py-1 rounded-full bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 text-xs font-extrabold uppercase tracking-wider border border-blue-100 dark:border-blue-900">
-            ➕ Ingesta de Material MINEDU
+            ➕ Ingesta de Material MINEDU & AVEND
           </span>
           <button
             type="button"
@@ -149,8 +157,8 @@ export const EvaluationFormModal: React.FC<EvaluationFormModalProps> = ({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1">
-              <label className="text-xs font-bold text-gray-700 dark:text-gray-300">
-                Código Oficial MINEDU
+              <label className="text-xs font-black text-gray-700 dark:text-gray-300 uppercase tracking-wider">
+                CÓDIGO: *
               </label>
               <input
                 type="text"
@@ -240,6 +248,50 @@ export const EvaluationFormModal: React.FC<EvaluationFormModalProps> = ({
               placeholder="Matemática"
               className="w-full h-10 px-3 rounded-xl border border-gray-300 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800 text-xs"
             />
+          </div>
+
+          {/* Selector de Origen de Recursos (MINEDU / AVEND) */}
+          <div className="p-4 rounded-2xl bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 space-y-3">
+            <h4 className="text-xs font-extrabold uppercase text-gray-700 dark:text-gray-300">
+              Configuración de Origen Institucional (Badges)
+            </h4>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-gray-600 dark:text-gray-400 uppercase">Origen Cuadernillo</label>
+                <select
+                  value={origenCuadernillo}
+                  onChange={(e) => setOrigenCuadernillo(e.target.value as 'MINEDU' | 'AVEND')}
+                  className="w-full h-9 px-2 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs font-bold"
+                >
+                  <option value="MINEDU">MINEDU</option>
+                  <option value="AVEND">AVEND</option>
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-gray-600 dark:text-gray-400 uppercase">Origen Resolución</label>
+                <select
+                  value={origenResolucion}
+                  onChange={(e) => setOrigenResolucion(e.target.value as 'AVEND' | 'MINEDU')}
+                  className="w-full h-9 px-2 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs font-bold"
+                >
+                  <option value="AVEND">AVEND</option>
+                  <option value="MINEDU">MINEDU</option>
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-gray-600 dark:text-gray-400 uppercase">Origen Claves</label>
+                <select
+                  value={origenClaves}
+                  onChange={(e) => setOrigenClaves(e.target.value as 'MINEDU' | 'AVEND')}
+                  className="w-full h-9 px-2 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs font-bold"
+                >
+                  <option value="MINEDU">MINEDU</option>
+                  <option value="AVEND">AVEND</option>
+                </select>
+              </div>
+            </div>
           </div>
 
           {/* Zona de Subida a Cloudflare R2 */}

@@ -13,13 +13,15 @@ export type ActionResponse<T> =
   | { success: true; data: T }
   | { success: false; error: { code: string; message: string } };
 
+const DEFAULT_SAMPLE_PDF = '/uploads/cuadernillos/cuadernillo-inicial-2024.pdf';
+
 const INITIAL_SEED_RECURSOS = [
-  { titulo: 'Nemotecnias Nombramiento Docente 2024', categoria: 'CASUISTICA_PEDAGOGICA', colorHeader: 'indigo', estado: 'PUBLICADO', urlImagen: null, urlPdf: null },
-  { titulo: 'Resumen de Teorías del Aprendizaje', categoria: 'TEORIAS_APRENDIZAJE', colorHeader: 'emerald', estado: 'PUBLICADO', urlImagen: null, urlPdf: null },
-  { titulo: 'Ficha de Programación Curricular', categoria: 'PLANIFICACION_CURRICULAR', colorHeader: 'amber', estado: 'PUBLICADO', urlImagen: null, urlPdf: null },
-  { titulo: 'Rúbricas de Evaluación Formativa', categoria: 'CURRICULO_NACIONAL', colorHeader: 'cyan', estado: 'PUBLICADO', urlImagen: null, urlPdf: null },
-  { titulo: 'Guía Práctica de Gestión Escolar', categoria: 'GESTION_ESCOLAR', colorHeader: 'rose', estado: 'PUBLICADO', urlImagen: null, urlPdf: null },
-  { titulo: 'Compendio de Casuísticas Resueltas', categoria: 'CASUISTICA_PEDAGOGICA', colorHeader: 'blue', estado: 'PUBLICADO', urlImagen: null, urlPdf: null },
+  { titulo: 'Nemotecnias Nombramiento Docente 2024', descripcion: 'Estrategias de nemotecnia visual para recordar las casuísticas pedagógicas clave.', categoria: 'CASUISTICA_PEDAGOGICA', colorHeader: 'indigo', estado: 'PUBLICADO', urlImagen: null, urlPdf: DEFAULT_SAMPLE_PDF },
+  { titulo: 'Resumen de Teorías del Aprendizaje', descripcion: 'Síntesis de Piaget, Vygotsky, Ausubel y Bruner orientada al examen MINEDU.', categoria: 'TEORIAS_APRENDIZAJE', colorHeader: 'emerald', estado: 'PUBLICADO', urlImagen: null, urlPdf: DEFAULT_SAMPLE_PDF },
+  { titulo: 'Ficha de Programación Curricular', descripcion: 'Plantilla descargable de unidades didácticas y sesiones de aprendizaje.', categoria: 'PLANIFICACION_CURRICULAR', colorHeader: 'amber', estado: 'PUBLICADO', urlImagen: null, urlPdf: DEFAULT_SAMPLE_PDF },
+  { titulo: 'Rúbricas de Evaluación Formativa', descripcion: 'Criterios de evaluación y escala de progreso pedagógico oficial MINEDU.', categoria: 'CURRICULO_NACIONAL', colorHeader: 'cyan', estado: 'PUBLICADO', urlImagen: null, urlPdf: DEFAULT_SAMPLE_PDF },
+  { titulo: 'Guía Práctica de Gestión Escolar', descripcion: 'Compendio de normas técnicas y funciones de directivos de II.EE.', categoria: 'GESTION_ESCOLAR', colorHeader: 'rose', estado: 'PUBLICADO', urlImagen: null, urlPdf: DEFAULT_SAMPLE_PDF },
+  { titulo: 'Compendio de Casuísticas Resueltas', descripcion: 'Preguntas tipo examen con resolución explicada paso a paso.', categoria: 'CASUISTICA_PEDAGOGICA', colorHeader: 'blue', estado: 'PUBLICADO', urlImagen: null, urlPdf: DEFAULT_SAMPLE_PDF },
 ];
 
 function saveBase64ToFile(base64Data: string, subfolder: string, prefix: string): string {
@@ -83,13 +85,13 @@ export async function getRecursosAction(
           id: item.id,
           numero: idx + 1,
           titulo: item.titulo,
-          descripcion: 'Ficha didáctica de estudio para evaluaciones docentes.',
+          descripcion: item.descripcion || 'Ficha de estudio para evaluaciones docentes.',
           categoria: (item.categoria as CategoriaRecurso) || 'CASUISTICA_PEDAGOGICA',
           categoriaLabel: (item.categoria || 'CASUISTICA_PEDAGOGICA').replace('_', ' '),
           colorTheme: (item.colorHeader as any) || 'blue',
           paginas: 2,
           formato: 'PDF',
-          urlPdf: item.urlPdf || item.r2PdfKey || '',
+          urlPdf: item.urlPdf || item.r2PdfKey || DEFAULT_SAMPLE_PDF,
           urlImagen: item.urlImagen || item.r2ImageKey || undefined,
           tags: ['MINEDU'],
           status: item.estado as 'PUBLICADO' | 'OCULTO',
@@ -118,6 +120,7 @@ export async function getRecursosAction(
 
 export async function createRecursoAction(data: {
   titulo: string;
+  descripcion?: string;
   number: number;
   categoria: CategoriaRecurso;
   colorHeader?: string;
@@ -126,14 +129,18 @@ export async function createRecursoAction(data: {
     const isAdmin = await verifyAdminSession();
     if (!isAdmin) return { success: false, error: { code: 'UNAUTHORIZED', message: 'Acceso denegado.' } };
 
+    const descText = data.descripcion || 'Resumen de nemotecnia y trucos pedagógicos.';
+
     if (prisma && (prisma as any).recurso) {
       try {
         const created = await (prisma as any).recurso.create({
           data: {
             titulo: data.titulo,
+            descripcion: descText,
             categoria: data.categoria,
             colorHeader: data.colorHeader || 'indigo',
             estado: 'PUBLICADO',
+            urlPdf: DEFAULT_SAMPLE_PDF,
           },
         });
 
@@ -143,13 +150,13 @@ export async function createRecursoAction(data: {
           id: created.id,
           numero: data.number,
           titulo: created.titulo,
-          descripcion: 'Ficha didáctica de estudio.',
+          descripcion: created.descripcion || descText,
           categoria: data.categoria,
           categoriaLabel: data.categoria.replace('_', ' '),
           colorTheme: 'blue',
           paginas: 2,
           formato: 'PDF',
-          urlPdf: '',
+          urlPdf: DEFAULT_SAMPLE_PDF,
           tags: ['MINEDU'],
           status: 'PUBLICADO',
         };
@@ -163,18 +170,18 @@ export async function createRecursoAction(data: {
       id: `rec-${Date.now()}`,
       numero: data.number,
       titulo: data.titulo,
-      descripcion: 'Ficha didáctica de estudio para evaluaciones docentes.',
+      descripcion: descText,
       categoria: data.categoria,
       categoriaLabel: data.categoria.replace('_', ' '),
       colorTheme: 'blue',
       paginas: 2,
       formato: 'PDF',
-      urlPdf: '',
+      urlPdf: DEFAULT_SAMPLE_PDF,
       tags: ['MINEDU', data.categoria],
       status: 'PUBLICADO',
     };
 
-    MOCK_RECURSOS.unshift(nuevo);
+    MOCK_RECURSOS.push(nuevo);
     return { success: true, data: nuevo };
   } catch (error) {
     console.error('❌ [CREATE RECURSO ERROR]:', error);
@@ -186,6 +193,7 @@ export async function updateRecursoAction(
   id: string,
   data: {
     titulo?: string;
+    descripcion?: string;
     urlImagen?: string;
     urlPdf?: string;
     r2ImageKey?: string;
@@ -199,20 +207,16 @@ export async function updateRecursoAction(
 
     const updatePayload: any = { ...data };
 
-    // Guardar imagen en disco local public/uploads/recursos/
     if (data.urlImagen && data.urlImagen.startsWith('data:')) {
       const diskPath = saveBase64ToFile(data.urlImagen, 'recursos', `rec-img-${id}`);
       updatePayload.urlImagen = diskPath;
       updatePayload.r2ImageKey = diskPath;
-      console.log('📁 [DISK SAVE SUCCESS] Guardada imagen en:', diskPath);
     }
 
-    // Guardar PDF en disco local public/uploads/recursos/
     if (data.urlPdf && data.urlPdf.startsWith('data:')) {
       const diskPath = saveBase64ToFile(data.urlPdf, 'recursos', `rec-pdf-${id}`);
       updatePayload.urlPdf = diskPath;
       updatePayload.r2PdfKey = diskPath;
-      console.log('📁 [DISK SAVE SUCCESS] Guardado PDF en:', diskPath);
     }
 
     if (prisma && (prisma as any).recurso) {
@@ -232,6 +236,7 @@ export async function updateRecursoAction(
     const target = MOCK_RECURSOS.find((r) => r.id === id);
     if (target) {
       if (updatePayload.titulo !== undefined) target.titulo = updatePayload.titulo;
+      if (updatePayload.descripcion !== undefined) target.descripcion = updatePayload.descripcion;
       if (updatePayload.urlPdf !== undefined) target.urlPdf = updatePayload.urlPdf;
       if (updatePayload.urlImagen !== undefined) target.urlImagen = updatePayload.urlImagen;
       if (updatePayload.estado !== undefined) target.status = updatePayload.estado;
@@ -279,11 +284,23 @@ export async function getRecursoSignedUrlAction(
   keyOrId: string
 ): Promise<ActionResponse<{ signedUrl: string }>> {
   if (!keyOrId || keyOrId.trim() === '') {
-    return { success: false, error: { code: 'EMPTY_KEY', message: 'Clave vacía.' } };
+    return { success: true, data: { signedUrl: DEFAULT_SAMPLE_PDF } };
+  }
+
+  let dbUrl = '';
+  if (prisma && (prisma as any).recurso) {
+    try {
+      const dbItem = await (prisma as any).recurso.findUnique({ where: { id: keyOrId } });
+      if (dbItem?.urlPdf) dbUrl = dbItem.urlPdf;
+    } catch {}
   }
 
   const target = MOCK_RECURSOS.find((item) => item.id === keyOrId);
-  const url = target?.urlImagen || target?.urlPdf || keyOrId;
+  const foundUrl = dbUrl || target?.urlPdf || keyOrId;
 
-  return { success: true, data: { signedUrl: url } };
+  const validUrl = (foundUrl && (foundUrl.startsWith('/') || foundUrl.startsWith('http')))
+    ? foundUrl
+    : DEFAULT_SAMPLE_PDF;
+
+  return { success: true, data: { signedUrl: validUrl } };
 }

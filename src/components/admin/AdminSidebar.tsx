@@ -1,7 +1,7 @@
 // src/components/admin/AdminSidebar.tsx
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 
 export type AdminTab = 'inicio' | 'usuarios' | 'cuadernillos' | 'recursos';
@@ -9,9 +9,34 @@ export type AdminTab = 'inicio' | 'usuarios' | 'cuadernillos' | 'recursos';
 interface AdminSidebarProps {
   activeTab: AdminTab;
   onTabChange: (tab: AdminTab) => void;
+  onLogout?: () => void;
 }
 
-export const AdminSidebar: React.FC<AdminSidebarProps> = ({ activeTab, onTabChange }) => {
+export const AdminSidebar: React.FC<AdminSidebarProps> = ({ activeTab, onTabChange, onLogout }) => {
+  const [adminUser, setAdminUser] = useState<{ name: string; role: string }>({
+    name: 'Juan Avend',
+    role: 'SUPERADMINISTRADOR',
+  });
+
+  useEffect(() => {
+    const sessionStr = localStorage.getItem('admin_auth_session') || sessionStorage.getItem('admin_auth_session');
+    if (sessionStr) {
+      try {
+        const parsed = JSON.parse(sessionStr);
+        if (parsed.name) {
+          setAdminUser({ name: parsed.name, role: parsed.role || 'ADMINISTRADOR' });
+        }
+      } catch {}
+    }
+  }, []);
+
+  const initials = adminUser.name
+    .split(' ')
+    .map((n) => n[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
+
   return (
     <aside className="w-64 h-screen sticky top-0 left-0 bg-slate-900 text-white flex flex-col justify-between p-5 shrink-0 z-40">
       <div className="space-y-6">
@@ -110,27 +135,28 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ activeTab, onTabChan
         </nav>
       </div>
 
-      {/* Bloque inferior con Avatar Superadministrador */}
+      {/* Bloque inferior dinámico con perfil de usuario conectado y Cerrar Sesión */}
       <div className="pt-4 border-t border-slate-800 space-y-3">
         <div className="flex items-center space-x-3 px-2">
           <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white font-extrabold text-sm shadow-sm shrink-0">
-            JA
+            {initials}
           </div>
           <div className="truncate">
-            <p className="text-xs font-bold text-white truncate">Juan Avend</p>
-            <p className="text-[10px] text-slate-400 truncate">Superadministrador</p>
+            <p className="text-xs font-bold text-white truncate">{adminUser.name}</p>
+            <p className="text-[10px] text-slate-400 truncate">{adminUser.role}</p>
           </div>
         </div>
 
-        <Link
-          href="/"
-          className="w-full flex items-center justify-center space-x-2 px-3 py-2 rounded-xl text-xs font-bold text-slate-400 hover:text-rose-400 hover:bg-slate-800/60 transition-colors"
+        <button
+          type="button"
+          onClick={onLogout}
+          className="w-full flex items-center justify-center space-x-2 px-3 py-2 rounded-xl text-xs font-bold text-rose-300 hover:text-white hover:bg-rose-950/60 border border-rose-900/40 transition-colors cursor-pointer"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
           </svg>
-          <span>Salir</span>
-        </Link>
+          <span>Cerrar Sesión</span>
+        </button>
       </div>
     </aside>
   );

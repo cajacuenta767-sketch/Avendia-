@@ -17,7 +17,16 @@ export type ActionResponse<T> =
   | { success: true; data: T }
   | { success: false; error: { code: string; message: string } };
 
-const DEFAULT_ANIOS = ['2024', '2023', '2022', '2021', '2019', '2018'];
+const DEFAULT_ANIOS = ['2024', '2023', '2022', '2021', '2019', '2018', '2014'];
+
+function cleanNoAplicaStr(str?: string): string {
+  if (!str) return '';
+  return str
+    .replace(/NO_APLICA\s*[-•]?\s*/gi, '')
+    .replace(/No Aplica \/ Cargos Directivos\s*[-•]?\s*/gi, '')
+    .replace(/No Aplica\s*[-•]?\s*/gi, '')
+    .trim();
+}
 
 function saveBase64ToFile(base64Data: string, subfolder: string, prefix: string): string {
   if (!base64Data || !base64Data.startsWith('data:')) {
@@ -99,6 +108,9 @@ export async function createEvaluacionAction(data: {
   urlCuadernillo?: string;
   urlResolucion?: string;
   urlClaves?: string;
+  origenCuadernillo?: string;
+  origenResolucion?: string;
+  origenClaves?: string;
   esPremium?: boolean;
 }): Promise<ActionResponse<{ id: string }>> {
   try {
@@ -106,7 +118,10 @@ export async function createEvaluacionAction(data: {
     const resolucionPath = data.urlResolucion ? saveBase64ToFile(data.urlResolucion, 'cuadernillos', 'resolucion') : null;
     const clavesPath = data.urlClaves ? saveBase64ToFile(data.urlClaves, 'cuadernillos', 'claves') : null;
 
-    const tituloGenerado = `Prueba Única Nacional ${data.proceso} ${data.anio} - ${data.nivel} ${data.area}`;
+    const isNivelValido = data.nivel && data.nivel.toUpperCase() !== 'NO_APLICA' && !data.nivel.toLowerCase().includes('no aplica');
+    const tituloGenerado = isNivelValido
+      ? `Prueba Única Nacional ${data.proceso} ${data.anio} - ${data.nivel} ${data.area}`
+      : `Prueba Única Nacional ${data.proceso} ${data.anio} - ${data.area}`;
 
     const created = await prisma.evaluacion.create({
       data: {
@@ -119,6 +134,9 @@ export async function createEvaluacionAction(data: {
         urlCuadernillo: cuadernilloPath,
         urlResolucion: resolucionPath,
         urlClaves: clavesPath,
+        origenCuadernillo: data.origenCuadernillo || 'MINEDU',
+        origenResolucion: data.origenResolucion || 'AVEND',
+        origenClaves: data.origenClaves || 'MINEDU',
         esPremium: Boolean(data.esPremium),
       },
     });
@@ -129,6 +147,18 @@ export async function createEvaluacionAction(data: {
   } catch (error: any) {
     console.error('❌ [CREATE EVALUACION ERROR]:', error);
     return { success: false, error: { code: 'CREATE_FAILED', message: `Error al registrar la evaluación: ${error?.message || error}` } };
+  }
+}
+
+export async function deleteEvaluacionAction(id: string): Promise<ActionResponse<{ id: string }>> {
+  try {
+    await prisma.evaluacion.delete({ where: { id } });
+    revalidatePath('/admin');
+    revalidatePath('/cuadernillos');
+    return { success: true, data: { id } };
+  } catch (error: any) {
+    console.error('❌ [DELETE EVALUACION ERROR]:', error);
+    return { success: false, error: { code: 'DELETE_FAILED', message: error?.message || 'Error al eliminar evaluación.' } };
   }
 }
 
@@ -160,25 +190,33 @@ export async function getEvaluacionesAction(
       orderBy: { createdAt: 'desc' },
     });
 
-    const formattedList: Evaluacion[] = dbEvaluaciones.map((item) => ({
-      id: item.id,
-      mineduCode: `MINEDU-${item.anio}-${item.area}`,
-      titulo: item.titulo || `Prueba Única Nacional ${item.proceso} ${item.anio} - ${item.nivel} ${item.area}`,
-      proceso: item.proceso as ProcesoMinedu,
-      modalidad: item.modalidad as ModalidadEducativa,
-      nivel: item.nivel as NivelEducativo,
-      especialidad: item.area,
-      especialidadLabel: `${item.nivel} - ${item.area}`,
-      anio: Number(item.anio) || 2024,
-      isLatest: true,
-      resources: {
-        cuadernilloKey: item.urlCuadernillo || '',
-        resolucionKey: item.urlResolucion || undefined,
-        clavesKey: item.urlClaves || undefined,
-      },
-      createdAt: item.createdAt.toISOString(),
-      updatedAt: item.createdAt.toISOString(),
-    }));
+    const formattedList: Evaluacion[] = dbEvaluaciones.map((item) => {
+      const isNivelValido = item.nivel && item.nivel.toUpperCase() !== 'NO_APLICA' && !item.nivel.toLowerCase().includes('no aplica');
+      const labelLimpia = isNivelValido ? `${item.nivel} - ${item.area}` : item.area;
+
+      return {
+        id: item.id,
+        mineduCode: `MINEDU-${item.anio}-${cleanNoAplicaStr(item.area)}`,
+        titulo: cleanNoAplicaStr(item.titulo) || `Prueba Única Nacional ${item.proceso} ${item.anio} - ${cleanNoAplicaStr(item.area)}`,
+        proceso: item.proceso as ProcesoMinedu,
+        modalidad: item.modalidad as ModalidadEducativa,
+        nivel: item.nivel as NivelEducativo,
+        especialidad: item.area,
+        especialidadLabel: labelLimpia,
+        anio: Number(item.anio) || 2024,
+        isLatest: true,
+        resources: {
+          cuadernilloKey: item.urlCuadernillo || '',
+          resolucionKey: item.urlResolucion || undefined,
+          clavesKey: item.urlClaves || undefined,
+          origenCuadernillo: item.origenCuadernillo || 'MINEDU',
+          origenResolucion: item.origenResolucion || 'AVEND',
+          origenClaves: item.origenClaves || 'MINEDU',
+        },
+        createdAt: item.createdAt.toISOString(),
+        updatedAt: item.createdAt.toISOString(),
+      };
+    });
 
     return { success: true, data: formattedList };
   } catch (error: any) {

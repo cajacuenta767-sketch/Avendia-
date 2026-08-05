@@ -1,7 +1,7 @@
 // src/components/admin/views/CuadernillosView.tsx
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   getCuadernillosAction,
   crearCuadernilloAction,
@@ -9,6 +9,41 @@ import {
   eliminarCuadernilloAction,
   CuadernilloItem,
 } from '@/services/cuadernillosService';
+
+const NIVELES_POR_MODALIDAD: Record<string, { value: string; label: string }[]> = {
+  EBR: [
+    { value: 'INICIAL', label: 'Inicial' },
+    { value: 'PRIMARIA', label: 'Primaria' },
+    { value: 'SECUNDARIA', label: 'Secundaria' },
+  ],
+  EBA: [
+    { value: 'INICIAL', label: 'Ciclo Inicial e Intermedio' },
+    { value: 'SECUNDARIA', label: 'Ciclo Avanzado' },
+  ],
+  EBE: [
+    { value: 'INICIAL', label: 'Inicial EBE' },
+    { value: 'PRIMARIA', label: 'Primaria EBE' },
+  ],
+};
+
+const AREAS_POR_NIVEL: Record<string, string[]> = {
+  INICIAL: ['Educación Inicial', 'AIP / Aula de Innovación Pedagógica'],
+  PRIMARIA: ['Educación Primaria', 'Educación Física', 'AIP / Aula de Innovación Pedagógica'],
+  SECUNDARIA: [
+    'Matemática',
+    'Comunicación',
+    'Ciencia y Tecnología',
+    'Ciencias Sociales',
+    'Desarrollo Personal, Ciudadanía y Cívica (DPCC)',
+    'Educación Física',
+    'Inglés',
+    'Educación para el Trabajo (EPT)',
+    'Arte y Cultura',
+    'Educación Religiosa',
+    'AIP / Aula de Innovación Pedagógica',
+  ],
+  NO_APLICA: ['No Aplica / Cargos Directivos', 'Directivos de IE', 'Especialistas de DRE/UGEL'],
+};
 
 export const CuadernillosView: React.FC = () => {
   const [items, setItems] = useState<CuadernilloItem[]>([]);
@@ -101,6 +136,31 @@ export const CuadernillosView: React.FC = () => {
     });
   };
 
+  // Reseteo en Cascada cuando cambia la Modalidad en el Modal Admin
+  const handleModalidadChange = (nuevaModalidad: string) => {
+    const niveles = NIVELES_POR_MODALIDAD[nuevaModalidad] || NIVELES_POR_MODALIDAD.EBR;
+    const primerNivel = niveles[0].value;
+    const primerasAreas = AREAS_POR_NIVEL[primerNivel] || AREAS_POR_NIVEL.INICIAL;
+
+    setModalState((prev) => ({
+      ...prev,
+      modalidad: nuevaModalidad,
+      nivel: primerNivel,
+      area: primerasAreas[0],
+    }));
+  };
+
+  // Reseteo en Cascada cuando cambia el Nivel en el Modal Admin (Evita que quede 'Inicial' en 'Secundaria')
+  const handleNivelChange = (nuevoNivel: string) => {
+    const primerasAreas = AREAS_POR_NIVEL[nuevoNivel] || AREAS_POR_NIVEL.INICIAL;
+
+    setModalState((prev) => ({
+      ...prev,
+      nivel: nuevoNivel,
+      area: primerasAreas[0], // RESETEA AUTOMÁTICAMENTE EL ÁREA AL NUEVO NIVEL
+    }));
+  };
+
   const handleSaveModal = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -156,6 +216,20 @@ export const CuadernillosView: React.FC = () => {
       showToast(`❌ ${res.error.message}`);
     }
   };
+
+  const nivelesDisponiblesModal = useMemo(() => {
+    if (modalState.proceso === 'ACCESO_CARGOS_DIRECTIVOS') {
+      return [{ value: 'NO_APLICA', label: 'No Aplica / Cargos Directivos' }];
+    }
+    return NIVELES_POR_MODALIDAD[modalState.modalidad] || NIVELES_POR_MODALIDAD.EBR;
+  }, [modalState.proceso, modalState.modalidad]);
+
+  const areasDisponiblesModal = useMemo(() => {
+    if (modalState.proceso === 'ACCESO_CARGOS_DIRECTIVOS' || modalState.nivel === 'NO_APLICA') {
+      return AREAS_POR_NIVEL.NO_APLICA;
+    }
+    return AREAS_POR_NIVEL[modalState.nivel] || AREAS_POR_NIVEL.INICIAL;
+  }, [modalState.proceso, modalState.nivel]);
 
   return (
     <div className="space-y-6">
@@ -258,7 +332,7 @@ export const CuadernillosView: React.FC = () => {
         )}
       </div>
 
-      {/* Modal Crear / Editar */}
+      {/* Modal Crear / Editar en Panel Administrador */}
       {modalState.isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4">
@@ -284,7 +358,14 @@ export const CuadernillosView: React.FC = () => {
                   <label className="block font-extrabold text-slate-700 dark:text-slate-300 mb-1">Proceso</label>
                   <select
                     value={modalState.proceso}
-                    onChange={(e) => setModalState({ ...modalState, proceso: e.target.value })}
+                    onChange={(e) => {
+                      const nuevoProc = e.target.value;
+                      if (nuevoProc === 'ACCESO_CARGOS_DIRECTIVOS') {
+                        setModalState((prev) => ({ ...prev, proceso: nuevoProc, nivel: 'NO_APLICA', area: AREAS_POR_NIVEL.NO_APLICA[0] }));
+                      } else {
+                        setModalState((prev) => ({ ...prev, proceso: nuevoProc }));
+                      }
+                    }}
                     className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none"
                   >
                     <option value="NOMBRAMIENTO_DOCENTE">Nombramiento Docente</option>
@@ -296,7 +377,7 @@ export const CuadernillosView: React.FC = () => {
                   <label className="block font-extrabold text-slate-700 dark:text-slate-300 mb-1">Modalidad</label>
                   <select
                     value={modalState.modalidad}
-                    onChange={(e) => setModalState({ ...modalState, modalidad: e.target.value })}
+                    onChange={(e) => handleModalidadChange(e.target.value)}
                     className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none"
                   >
                     <option value="EBR">EBR</option>
@@ -309,26 +390,34 @@ export const CuadernillosView: React.FC = () => {
               <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className="block font-extrabold text-slate-700 dark:text-slate-300 mb-1">Nivel</label>
-                  <input
-                    type="text"
-                    required
+                  <select
                     value={modalState.nivel}
-                    onChange={(e) => setModalState({ ...modalState, nivel: e.target.value })}
-                    placeholder="SECUNDARIA"
+                    onChange={(e) => handleNivelChange(e.target.value)}
                     className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
-                  />
+                  >
+                    {nivelesDisponiblesModal.map((n) => (
+                      <option key={n.value} value={n.value}>
+                        {n.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
+
                 <div>
                   <label className="block font-extrabold text-slate-700 dark:text-slate-300 mb-1">Área / Especialidad</label>
-                  <input
-                    type="text"
-                    required
+                  <select
                     value={modalState.area}
                     onChange={(e) => setModalState({ ...modalState, area: e.target.value })}
-                    placeholder="Matemática"
                     className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
-                  />
+                  >
+                    {areasDisponiblesModal.map((esp) => (
+                      <option key={esp} value={esp}>
+                        {esp}
+                      </option>
+                    ))}
+                  </select>
                 </div>
+
                 <div>
                   <label className="block font-extrabold text-slate-700 dark:text-slate-300 mb-1">Año</label>
                   <input

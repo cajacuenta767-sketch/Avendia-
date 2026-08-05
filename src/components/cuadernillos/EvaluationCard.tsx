@@ -12,6 +12,15 @@ interface EvaluationCardProps {
   ) => void;
 }
 
+function cleanNoAplicaText(str?: string): string {
+  if (!str) return '';
+  return str
+    .replace(/NO_APLICA\s*[-•]?\s*/gi, '')
+    .replace(/No Aplica \/ Cargos Directivos\s*[-•]?\s*/gi, '')
+    .replace(/No Aplica\s*[-•]?\s*/gi, '')
+    .trim();
+}
+
 export const EvaluationCard: React.FC<EvaluationCardProps> = ({
   evaluacion,
   onOpenResource,
@@ -28,96 +37,183 @@ export const EvaluationCard: React.FC<EvaluationCardProps> = ({
     }
   };
 
-  return (
-    <article className="group relative flex flex-col justify-between bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all duration-200 hover:border-blue-300 dark:hover:border-blue-800">
-      {/* 1. Cabecera de la Tarjeta */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between gap-2">
-          {/* Badge de Modalidad / Tipo */}
-          <span className="inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-bold tracking-wider uppercase bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300">
-            {evaluacion.modalidad} · {evaluacion.nivel}
-          </span>
+  const isDirectivos = evaluacion.proceso === 'ACCESO_CARGOS_DIRECTIVOS';
 
-          <div className="flex items-center space-x-2">
-            {/* Badge de Más Reciente */}
-            {evaluacion.isLatest && (
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                ★ Más Reciente
-              </span>
-            )}
-            {/* Badge del Año */}
-            <span className="inline-flex items-center px-3 py-1 rounded-lg text-sm font-extrabold bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-100 dark:border-blue-900">
-              {evaluacion.anio}
-            </span>
-          </div>
+  const rawCodigo = evaluacion.codigo || evaluacion.mineduCode || '';
+  const codigoMostrar = cleanNoAplicaText(rawCodigo);
+
+  const procesoConcursoLabel =
+    evaluacion.proceso === 'ASCENSO_ESCALAFON'
+      ? 'CONCURSO DE ASCENSO'
+      : isDirectivos
+      ? 'DIRECTIVOS'
+      : 'CONCURSO DE NOMBRAMIENTO';
+
+  // Sanitización de nombres de cargos / especialidades
+  const especialidadSubtitulo = cleanNoAplicaText(evaluacion.especialidad) || 'Acceso a cargos directivos';
+  const tipoCuadernilloLabel = cleanNoAplicaText(evaluacion.especialidadLabel || evaluacion.titulo) || especialidadSubtitulo;
+
+  // Orígenes configurables desde el panel de administración
+  const origenCuadernillo = evaluacion.resources?.origenCuadernillo || 'MINEDU';
+  const origenResolucion = evaluacion.resources?.origenResolucion || 'AVEND';
+  const origenClaves = evaluacion.resources?.origenClaves || 'MINEDU';
+
+  // Verificación estricta de Nivel Válido según MINEDU
+  const isNivelValido =
+    !isDirectivos &&
+    evaluacion.nivel &&
+    evaluacion.nivel.toUpperCase() !== 'NO_APLICA' &&
+    !evaluacion.nivel.toLowerCase().includes('no aplica');
+
+  const renderSourceBadge = (source: string) => {
+    const isMinedu = source.toUpperCase() === 'MINEDU';
+    return (
+      <span
+        className={`px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider shrink-0 ml-auto border shadow-2xs ${
+          isMinedu
+            ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300 border-rose-200 dark:border-rose-900'
+            : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+        }`}
+      >
+        {source}
+      </span>
+    );
+  };
+
+  return (
+    <article className="group bg-white dark:bg-slate-900 rounded-3xl p-3 border border-gray-200/80 dark:border-slate-800 shadow-sm shadow-gray-200/50 dark:shadow-none transition-all duration-200 flex flex-row items-stretch w-full">
+      {/* 1. Panel Lateral Izquierdo (Estilo Fidedigno de la Captura MINEDU) */}
+      <div className="w-40 sm:w-44 bg-gray-200/60 dark:bg-slate-800/90 rounded-2xl p-3.5 flex flex-col justify-between shrink-0 border border-gray-300/40 dark:border-slate-700/60">
+        {/* MODALIDAD / CATEGORÍA SUPERIOR */}
+        <div>
+          <span className="text-[9px] font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wide block">
+            MODALIDAD
+          </span>
+          <span className="text-xs sm:text-sm font-black text-gray-900 dark:text-white uppercase block mt-0.5">
+            {isDirectivos ? 'EVALUACIÓN DOCENTE' : evaluacion.modalidad}
+          </span>
         </div>
 
-        {/* Título de la Evaluación */}
-        <h3 className="text-base font-bold text-gray-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors line-clamp-2 leading-snug">
-          {evaluacion.titulo}
-        </h3>
+        {/* NIVEL (Solo si es un nivel pedagógico válido: Inicial, Primaria, Secundaria) */}
+        {isNivelValido && (
+          <div className="border-t border-gray-300/60 dark:border-slate-700/60 pt-2 my-1">
+            <span className="text-[9px] font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wide text-center block">
+              NIVEL
+            </span>
+            <span className="text-sm font-semibold text-gray-800 dark:text-slate-200 text-center block mt-1 capitalize">
+              {evaluacion.nivel.toLowerCase()}
+            </span>
+          </div>
+        )}
 
-        {/* Etiqueta de Especialidad / Área */}
-        <div className="flex items-center space-x-1.5 text-xs text-gray-500 dark:text-gray-400">
-          <svg className="w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-          </svg>
-          <span className="font-medium">{evaluacion.especialidadLabel}</span>
+        {/* TIPO DE CARGO O ESPECIALIDAD */}
+        <div className="border-t border-gray-300/60 dark:border-slate-700/60 pt-2 my-1">
+          <span className="text-[8px] font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wide text-center block">
+            {isDirectivos ? 'TIPO DE CARGO O ESPECIALIDAD' : 'TIPO DE CUADERNILLO'}
+          </span>
+          <span className="text-[10px] font-bold text-gray-800 dark:text-slate-200 text-center leading-tight block mt-0.5 line-clamp-2">
+            {especialidadSubtitulo}
+          </span>
+        </div>
+
+        {/* PIE DEL PANEL GRIS (Directivos / Concurso + Año) */}
+        <div className="border-t border-gray-300/60 dark:border-slate-700/60 pt-2 mt-1 flex items-end justify-between w-full">
+          <span className="text-[7px] font-black text-gray-600 dark:text-slate-400 uppercase leading-tight w-20">
+            {procesoConcursoLabel}
+          </span>
+          <span className="text-xl font-black text-gray-900 dark:text-white leading-none">
+            {evaluacion.anio}
+          </span>
         </div>
       </div>
 
-      {/* 2. Botonera Triple de Acción */}
-      <div className="mt-6 pt-4 border-t border-gray-100 dark:border-gray-800 space-y-2">
-        {/* Botón 1: Ver Cuadernillo */}
-        <button
-          type="button"
-          onClick={(e) => handleAction('CUADERNILLO', e)}
-          className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/60 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-200 text-xs font-bold transition-all border border-blue-100 dark:border-blue-900/50"
-        >
-          <div className="flex items-center space-x-2">
-            <svg className="w-4 h-4 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-            <span>VER CUADERNILLO</span>
-          </div>
-          <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-blue-200/60 dark:bg-blue-900/80 text-blue-800 dark:text-blue-100 uppercase">
-            PDF
-          </span>
-        </button>
+      {/* 2. Panel Derecho (Contenido Principal y Botones) */}
+      <div className="flex-1 min-w-0 pl-3.5 sm:pl-4 py-1 pr-1 flex flex-col justify-between bg-white dark:bg-slate-900">
+        <div>
+          {/* Fila Superior: Píldora Modalidad + Badge Novedad */}
+          <div className="flex items-center justify-between gap-2">
+            <span className="bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-slate-300 px-3 py-1 rounded-full text-xs font-bold truncate border border-gray-200/80 dark:border-slate-700">
+              {isNivelValido ? `${evaluacion.modalidad} - ${evaluacion.nivel}` : evaluacion.modalidad}
+            </span>
 
-        {/* Botón 2: Ver Resolución */}
-        <button
-          type="button"
-          onClick={(e) => handleAction('RESOLUCION', e)}
-          className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-200 text-xs font-bold transition-all border border-emerald-100 dark:border-emerald-900/50"
-        >
-          <div className="flex items-center space-x-2">
-            <svg className="w-4 h-4 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <span>VER RESOLUCIÓN</span>
+            {evaluacion.isLatest && (
+              <span className="bg-emerald-100/80 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider shrink-0 border border-emerald-200/80 dark:border-emerald-800">
+                MÁS RECIENTE
+              </span>
+            )}
           </div>
-          <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-emerald-200/60 dark:bg-emerald-900/80 text-emerald-800 dark:text-emerald-100 uppercase">
-            SOLUCIONARIO
-          </span>
-        </button>
 
-        {/* Botón 3: Ver Claves */}
-        <button
-          type="button"
-          onClick={(e) => handleAction('CLAVES', e)}
-          className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/60 dark:hover:bg-amber-900/60 text-amber-800 dark:text-amber-200 text-xs font-bold transition-all border border-amber-100 dark:border-amber-900/50"
-        >
-          <div className="flex items-center space-x-2">
-            <svg className="w-4 h-4 text-amber-600 dark:text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 0121 9z" />
-            </svg>
-            <span>VER CLAVES</span>
+          {/* Bloque Año y Subtítulo Fidedigno del Modelo Cliente MINEDU */}
+          <div className="mt-2">
+            <span className="text-[9px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-wide block">
+              AÑO
+            </span>
+            <span className="text-2xl font-black text-gray-900 dark:text-white tracking-tight block leading-none mt-0.5">
+              {evaluacion.anio}
+            </span>
+
+            {/* Subtítulo dinámico idéntico a las capturas oficiales MINEDU */}
+            <h3 className="text-xs font-bold text-gray-800 dark:text-slate-200 mt-1 line-clamp-1">
+              {isDirectivos ? `Directivos - ${especialidadSubtitulo}` : `Cuadernillo de ${especialidadSubtitulo}`}
+            </h3>
+            <p className="text-[10px] text-gray-400 dark:text-slate-500">
+              {isDirectivos ? 'Evaluación para cargos de gestión' : `Prueba Oficial MINEDU ${evaluacion.anio}`}
+            </p>
+
+            <div className="text-[11px] font-mono mt-1">
+              <span className="text-rose-600 font-bold uppercase">CÓDIGO: </span>
+              <span className="text-gray-900 dark:text-slate-100 font-bold">{codigoMostrar}</span>
+            </div>
           </div>
-          <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-amber-200/60 dark:bg-amber-900/80 text-amber-900 dark:text-amber-100 uppercase">
-            RESPUESTAS
-          </span>
-        </button>
+        </div>
+
+        {/* 3. Botones de Acción Inferiores */}
+        <div className="space-y-2 w-full mt-3">
+          {/* Botón 1: VER CUADERNILLO */}
+          <button
+            type="button"
+            onClick={(e) => handleAction('CUADERNILLO', e)}
+            className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-blue-50/80 hover:bg-blue-100 dark:bg-blue-950/60 dark:hover:bg-blue-900/60 border border-blue-100 dark:border-blue-900/50 text-blue-900 dark:text-blue-200 text-xs font-bold cursor-pointer transition-colors"
+          >
+            <div className="flex items-center space-x-2 min-w-0 pr-2">
+              <svg className="w-3.5 h-3.5 text-blue-600 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" />
+              </svg>
+              <span className="truncate">VER CUADERNILLO</span>
+            </div>
+            {renderSourceBadge(origenCuadernillo)}
+          </button>
+
+          {/* Botón 2: VER RESOLUCIÓN */}
+          <button
+            type="button"
+            onClick={(e) => handleAction('RESOLUCION', e)}
+            className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-emerald-50/80 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/60 border border-emerald-100 dark:border-emerald-900/50 text-emerald-900 dark:text-emerald-200 text-xs font-bold cursor-pointer transition-colors"
+          >
+            <div className="flex items-center space-x-2 min-w-0 pr-2">
+              <svg className="w-3.5 h-3.5 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+              </svg>
+              <span className="truncate">VER RESOLUCIÓN</span>
+            </div>
+            {renderSourceBadge(origenResolucion)}
+          </button>
+
+          {/* Botón 3: VER CLAVES */}
+          <button
+            type="button"
+            onClick={(e) => handleAction('CLAVES', e)}
+            className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-amber-50/80 hover:bg-amber-100 dark:bg-amber-950/60 dark:hover:bg-amber-900/60 border border-amber-100 dark:border-amber-900/50 text-amber-900 dark:text-amber-200 text-xs font-bold cursor-pointer transition-colors"
+          >
+            <div className="flex items-center space-x-2 min-w-0 pr-2">
+              <svg className="w-3.5 h-3.5 text-amber-600 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M18 8a6 6 0 01-7.743 5.743L10 14l-1 1-1-1-1 1-1-1-2 2H2v-3.586l5.257-5.257A6 6 0 1118 8z" />
+              </svg>
+              <span className="truncate">VER CLAVES</span>
+            </div>
+            {renderSourceBadge(origenClaves)}
+          </button>
+        </div>
       </div>
     </article>
   );

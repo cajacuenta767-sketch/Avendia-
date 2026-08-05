@@ -13,7 +13,6 @@ interface RegisterModalProps {
 export const RegisterModal: React.FC<RegisterModalProps> = ({ isOpen, onClose }) => {
   const router = useRouter();
   const [fullName, setFullName] = useState('');
-  const [dni, setDni] = useState('');
   const [email, setEmail] = useState('');
   const [pin, setPin] = useState('');
   const [showPin, setShowPin] = useState(false);
@@ -31,11 +30,6 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({ isOpen, onClose })
       return;
     }
 
-    if (!/^\d{8}$/.test(dni)) {
-      setErrorMessage('El DNI debe contener exactamente 8 dígitos numéricos');
-      return;
-    }
-
     if (!email.trim() || !email.includes('@')) {
       setErrorMessage('Ingresa un correo electrónico válido');
       return;
@@ -49,7 +43,6 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({ isOpen, onClose })
     setIsLoading(true);
 
     const res = await registrarseDocenteAction({
-      dni: dni.trim(),
       nombre: fullName.trim(),
       email: email.trim().toLowerCase(),
       pin: pin.trim(),
@@ -60,7 +53,6 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({ isOpen, onClose })
     if (res.success) {
       const docenteData = {
         id: res.data.id,
-        dni: res.data.dni,
         nombre: res.data.nombre,
         email: res.data.email,
         fechaFin: res.data.fechaFin,
@@ -126,20 +118,19 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({ isOpen, onClose })
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            {/* DNI */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* Email */}
             <div className="space-y-1">
               <label className="text-xs font-bold text-gray-700 dark:text-gray-300">
-                DNI *
+                Correo Electrónico *
               </label>
               <input
-                type="text"
+                type="email"
                 required
-                maxLength={8}
-                value={dni}
-                onChange={(e) => setDni(e.target.value.replace(/\D/g, ''))}
-                placeholder="72849102"
-                className="w-full h-11 px-3.5 rounded-xl border border-gray-300 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800 text-gray-900 dark:text-white text-xs font-medium focus:ring-2 focus:ring-blue-500 outline-none font-mono"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="docente@minedu.edu.pe"
+                className="w-full h-11 px-3.5 rounded-xl border border-gray-300 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800 text-gray-900 dark:text-white text-xs font-medium focus:ring-2 focus:ring-blue-500 outline-none"
               />
             </div>
 
@@ -158,21 +149,6 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({ isOpen, onClose })
                 className="w-full h-11 px-3.5 rounded-xl border border-gray-300 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800 text-gray-900 dark:text-white text-xs font-medium focus:ring-2 focus:ring-blue-500 outline-none font-mono"
               />
             </div>
-          </div>
-
-          {/* Email */}
-          <div className="space-y-1">
-            <label className="text-xs font-bold text-gray-700 dark:text-gray-300">
-              Correo Electrónico *
-            </label>
-            <input
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="docente@minedu.edu.pe"
-              className="w-full h-11 px-3.5 rounded-xl border border-gray-300 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800 text-gray-900 dark:text-white text-xs font-medium focus:ring-2 focus:ring-blue-500 outline-none"
-            />
           </div>
 
           {/* Botones */}

@@ -182,6 +182,7 @@ model AnswerAttempt {
 model Recurso {
   id          String   @id @default(cuid())
   titulo      String
+  descripcion String?
   categoria   String?
   urlImagen   String?
   urlPdf      String?
@@ -203,11 +204,14 @@ model Evaluacion {
   nivel          String
   area           String
   anio           String
-  urlCuadernillo String?
-  urlResolucion  String?
-  urlClaves      String?
-  esPremium      Boolean  @default(false)
-  createdAt      DateTime @default(now())
+  urlCuadernillo    String?
+  urlResolucion     String?
+  urlClaves         String?
+  origenCuadernillo String?  @default("MINEDU")
+  origenResolucion  String?  @default("AVEND")
+  origenClaves      String?  @default("MINEDU")
+  esPremium         Boolean  @default(false)
+  createdAt         DateTime @default(now())
 
   @@map("evaluaciones")
 }
@@ -220,16 +224,21 @@ model AnioClasificacion {
 }
 
 model UsuarioDocente {
-  id          String   @id @default(cuid())
-  dni         String   @unique
-  nombre      String
-  email       String   @unique
-  pin         String
-  rol         String   @default("DOCENTE")
-  fechaInicio DateTime @default(now())
-  fechaFin    DateTime
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id            String   @id @default(cuid())
+  dni           String   @unique
+  nombre        String
+  email         String   @unique
+  pin           String
+  rol           String   @default("DOCENTE")
+  modalidad     String?  @default("EBR")
+  nivel         String?  @default("INICIAL")
+  areas         String?  @default("[]")
+  creadoPor     String?  @default("Juan Avend")
+  modificadoPor String?  @default("Juan Avend")
+  fechaInicio   DateTime @default(now())
+  fechaFin      DateTime
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   @@map("usuarios_docentes")
 }

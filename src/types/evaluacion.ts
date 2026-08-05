@@ -8,7 +8,7 @@ export type ProcesoMinedu =
   | 'INGRESO_CPM'
   | 'REASIGNACION_DOCENTE';
 
-export type ModalidadEducativa = 'EBR' | 'EBA' | 'EBE';
+export type ModalidadEducativa = 'EBR' | 'EBA' | 'EBE' | 'CETPRO';
 
 export type NivelEducativo = 
   | 'INICIAL'
@@ -35,6 +35,9 @@ export interface ResourceLinks {
   cuadernilloKey: string;      // Clave de R2 para el PDF del Cuadernillo principal
   resolucionKey?: string;      // Clave de R2 para la Resolución explicada (opcional)
   clavesKey?: string;          // Clave de R2 para la tabla de Claves oficiales (opcional)
+  origenCuadernillo?: 'MINEDU' | 'AVEND' | string;
+  origenResolucion?: 'AVEND' | 'MINEDU' | string;
+  origenClaves?: 'MINEDU' | 'AVEND' | string;
 }
 
 export interface Evaluacion {
@@ -46,6 +49,7 @@ export interface Evaluacion {
   nivel: NivelEducativo;
   especialidad: EspecialidadMinedu | string;
   especialidadLabel: string;   // Nombre amigable ej. "Secundaria - Matemática"
+  codigo?: string;             // Código específico de cuadernillo ingresado por Admin
   anio: number;
   isLatest?: boolean;          // Badge "Más Reciente"
   resources: ResourceLinks;

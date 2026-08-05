@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  avend-escala:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: avend-escala-app
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://neondb_owner:npg_LHve0b1UDsKy@ep-wispy-pond-ax48p2lk-pooler.c-4.us-east-2.aws.neon.tech/neondb?sslmode=require
+    volumes:
+      - ./public/uploads:/app/public/uploads

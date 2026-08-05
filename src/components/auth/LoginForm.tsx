@@ -1,50 +1,125 @@
 // src/components/auth/LoginForm.tsx
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { getWhatsAppLink } from '@/lib/whatsapp';
-import { RegisterModal } from '@/components/auth/RegisterModal';
-import { ForgotPasswordModal } from '@/components/auth/ForgotPasswordModal';
-import { loginDocenteAction } from '@/services/usuariosService';
+import { solicitarCodigoOtpAction, verificarCodigoOtpAction } from '@/services/usuariosService';
 
 export const LoginForm: React.FC = () => {
   const router = useRouter();
-  const [emailOrDni, setEmailOrDni] = useState('');
-  const [pin, setPin] = useState('');
-  const [showPin, setShowPin] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [errorMessage, setErrorMessage] = useState('');
+  const [step, setStep] = useState<1 | 2>(1);
+  const [email, setEmail] = useState('');
+  const [otpDigits, setOtpDigits] = useState<string[]>(['', '', '', '']);
+  const [timer, setTimer] = useState<number>(60);
+  const [isTimerActive, setIsTimerActive] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [errorMessage, setErrorMessage] = useState<string>('');
+  const [successMessage, setSuccessMessage] = useState<string>('');
 
-  // Modales
-  const [isRegisterOpen, setIsRegisterOpen] = useState(false);
-  const [isForgotOpen, setIsForgotOpen] = useState(false);
+  const inputRefs = [
+    useRef<HTMLInputElement>(null),
+    useRef<HTMLInputElement>(null),
+    useRef<HTMLInputElement>(null),
+    useRef<HTMLInputElement>(null),
+  ];
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMessage('');
-
-    if (!emailOrDni.trim()) {
-      setErrorMessage('Ingresa tu correo electrónico o número de DNI.');
-      return;
+  useEffect(() => {
+    let interval: any = null;
+    if (isTimerActive && timer > 0) {
+      interval = setInterval(() => {
+        setTimer((prev) => prev - 1);
+      }, 1000);
+    } else if (timer === 0) {
+      setIsTimerActive(false);
     }
+    return () => clearInterval(interval);
+  }, [isTimerActive, timer]);
 
-    if (!pin.trim() || pin.length < 4) {
-      setErrorMessage('Ingresa un PIN de acceso válido.');
+  const handleSendOtp = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setErrorMessage('');
+    setSuccessMessage('');
+
+    if (!email.trim() || !email.includes('@')) {
+      setErrorMessage('Por favor, escribe un correo electrónico válido.');
       return;
     }
 
     setIsLoading(true);
+    const res = await solicitarCodigoOtpAction(email);
+    setIsLoading(false);
 
-    const res = await loginDocenteAction(emailOrDni, pin);
+    if (res.success) {
+      setStep(2);
+      setTimer(60);
+      setIsTimerActive(true);
+      setSuccessMessage(res.data.message);
+      setTimeout(() => inputRefs[0].current?.focus(), 150);
+    } else {
+      setErrorMessage(res.error.message);
+    }
+  };
+
+  // Manejo de entrada caracter a caracter
+  const handleDigitChange = (index: number, value: string) => {
+    if (!/^\d*$/.test(value)) return;
+
+    const newDigits = [...otpDigits];
+    newDigits[index] = value.slice(-1);
+    setOtpDigits(newDigits);
+
+    if (value && index < 3) {
+      inputRefs[index + 1].current?.focus();
+    }
+  };
+
+  // Soporte de COPIAR Y PEGAR directamente desde Gmail
+  const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    const pastedData = e.clipboardData.getData('text');
+    const cleanNumbers = pastedData.replace(/\D/g, '').slice(0, 4);
+
+    if (cleanNumbers.length > 0) {
+      const newDigits = ['', '', '', ''];
+      for (let i = 0; i < cleanNumbers.length; i++) {
+        newDigits[i] = cleanNumbers[i];
+      }
+      setOtpDigits(newDigits);
+
+      const nextFocusIndex = Math.min(cleanNumbers.length, 3);
+      inputRefs[nextFocusIndex].current?.focus();
+    }
+  };
+
+  const handleKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Backspace' && !otpDigits[index] && index > 0) {
+      inputRefs[index - 1].current?.focus();
+    }
+  };
+
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMessage('');
+
+    const fullCode = otpDigits.join('');
+    if (fullCode.length < 4) {
+      setErrorMessage('Ingresa los 4 dígitos del código de confirmación.');
+      return;
+    }
+
+    setIsLoading(true);
+    const res = await verificarCodigoOtpAction(email, fullCode);
     setIsLoading(false);
 
     if (res.success) {
       const docenteData = {
         id: res.data.id,
-        dni: res.data.dni,
         nombre: res.data.nombre,
         email: res.data.email,
+        modalidad: res.data.modalidad,
+        nivel: res.data.nivel,
+        areas: res.data.areas,
         fechaFin: res.data.fechaFin,
       };
       localStorage.setItem('docente_session', JSON.stringify(docenteData));
@@ -56,155 +131,185 @@ export const LoginForm: React.FC = () => {
   };
 
   const whatsappUrl = getWhatsAppLink(
-    'Hola equipo de AVEND ESCALA, solicito la activación de mi cuenta para acceder al Banco de Evaluaciones MINEDU.'
+    `Hola equipo de AVEND ESCALA, solicito el acceso para mi correo ${email || 'docente'}.`
   );
 
   return (
-    <>
-      <div className="w-full bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 p-7 sm:p-8 shadow-xl shadow-blue-500/5 relative overflow-hidden">
-        {/* Insignia Superior */}
-        <div className="flex items-center justify-between mb-6">
-          <span className="inline-flex items-center px-3 py-1 rounded-full bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 text-xs font-extrabold uppercase tracking-wider border border-blue-100 dark:border-blue-900">
-            🔐 Portal de Acceso Docente
-          </span>
-          <span className="text-[11px] font-semibold text-gray-400">ACCESO RÁPIDO</span>
+    <div className="w-full bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 sm:p-8 shadow-xl shadow-blue-500/5 relative overflow-hidden space-y-5">
+      {/* Insignia Superior */}
+      <div className="flex items-center justify-between">
+        <span className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 text-[11px] font-extrabold uppercase tracking-wider border border-blue-100 dark:border-blue-900">
+          <svg className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+          </svg>
+          <span>PORTAL DE ACCESO DOCENTE</span>
+        </span>
+      </div>
+
+      <div className="space-y-1">
+        <h2 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">
+          Ingresa a tu cuenta
+        </h2>
+        <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+          Escribe correctamente tu correo electrónico que ya ha registrado en AVEND ESCALA.
+        </p>
+      </div>
+
+      {/* Alertas de Error o Éxito */}
+      {errorMessage && (
+        <div className="p-3.5 rounded-2xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-900 text-rose-800 dark:text-rose-200 text-xs font-bold leading-relaxed flex items-start space-x-2.5">
+          <svg className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span>{errorMessage}</span>
         </div>
+      )}
 
-        <div className="mb-6 space-y-1">
-          <h2 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight">
-            Ingresa a tu cuenta
-          </h2>
-          <p className="text-xs text-gray-500 dark:text-gray-400">
-            Ingresa tu correo o DNI registrado y tu PIN de acceso
-          </p>
+      {successMessage && (
+        <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-900 text-emerald-800 dark:text-emerald-200 text-xs font-bold leading-relaxed">
+          {successMessage}
         </div>
+      )}
 
-        {/* Formulario de Login */}
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {errorMessage && (
-            <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300 text-xs font-semibold flex items-center space-x-2">
-              <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <span>{errorMessage}</span>
-            </div>
-          )}
-
-          {/* Input 1: Correo / DNI */}
+      {/* FORMULARIO PASO 1 Y PASO 2 */}
+      {step === 1 ? (
+        <form onSubmit={handleSendOtp} className="space-y-4">
           <div className="space-y-1.5">
-            <label className="text-xs font-bold text-gray-700 dark:text-gray-300">
-              Correo Electrónico o DNI
-            </label>
             <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                 </svg>
               </div>
               <input
-                type="text"
-                value={emailOrDni}
-                onChange={(e) => setEmailOrDni(e.target.value)}
-                placeholder="ejemplo@docente.pe o 71234567"
-                className="w-full h-11 pl-10 pr-4 rounded-xl border border-gray-300 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="avendocente@gmail.com"
+                className="w-full h-12 pl-10 pr-4 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 text-xs font-bold focus:ring-2 focus:ring-blue-600 focus:border-blue-600 outline-none transition-all"
               />
             </div>
           </div>
 
-          {/* Input 2: PIN de Acceso */}
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-bold text-gray-700 dark:text-gray-300">
-                PIN de Acceso
-              </label>
-              <button
-                type="button"
-                onClick={() => setIsForgotOpen(true)}
-                className="text-[11px] font-semibold text-blue-600 dark:text-blue-400 hover:underline"
-              >
-                ¿Olvidaste tu PIN?
-              </button>
-            </div>
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                </svg>
-              </div>
-              <input
-                type={showPin ? 'text' : 'password'}
-                maxLength={6}
-                value={pin}
-                onChange={(e) => setPin(e.target.value)}
-                placeholder="••••"
-                className="w-full h-11 pl-10 pr-10 rounded-xl border border-gray-300 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 text-sm font-mono focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPin(!showPin)}
-                className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
-              >
-                {showPin ? (
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24M1 1l22 22" />
-                  </svg>
-                ) : (
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                  </svg>
-                )}
-              </button>
-            </div>
-          </div>
-
-          {/* Botón 1: Iniciar Sesión */}
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full h-12 mt-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-sm shadow-md shadow-blue-600/20 transition-all flex items-center justify-center space-x-2 cursor-pointer"
+            className="w-full h-12 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs tracking-wide shadow-md shadow-blue-600/20 transition-all flex items-center justify-center space-x-2 cursor-pointer"
           >
             {isLoading ? (
               <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
             ) : (
-              <>
-                <span>INGRESAR A MI CUENTA</span>
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                </svg>
-              </>
+              <span>SOLICITAR CÓDIGO DE ACCESO &gt;</span>
             )}
           </button>
         </form>
+      ) : (
+        <form onSubmit={handleVerifyOtp} className="space-y-5">
+          {/* Fila del Correo con Botón Reenviar */}
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
+              </div>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full h-11 pl-9 pr-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-bold outline-none"
+              />
+            </div>
 
-        {/* Enlace Limpio para Crear Cuenta Nueva */}
-        <div className="my-4 text-center">
+            <button
+              type="button"
+              disabled={isTimerActive}
+              onClick={() => handleSendOtp()}
+              className="h-11 px-3 rounded-xl bg-blue-100 dark:bg-blue-950 text-blue-600 dark:text-blue-300 text-[11px] font-extrabold disabled:opacity-60 whitespace-nowrap shrink-0 cursor-pointer"
+            >
+              {isTimerActive ? `Reenviar en ${timer}s` : 'Reenviar código'}
+            </button>
+          </div>
+
+          {/* Seccion de los 4 Casilleros de Código OTP con Soporte Paste */}
+          <div className="space-y-2">
+            <label className="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider block">
+              INGRESA EL CÓDIGO DE 4 DÍGITOS
+            </label>
+            <div className="flex items-center justify-between gap-3">
+              {otpDigits.map((digit, idx) => (
+                <input
+                  key={idx}
+                  ref={inputRefs[idx]}
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={1}
+                  value={digit}
+                  onChange={(e) => handleDigitChange(idx, e.target.value)}
+                  onPaste={handlePaste}
+                  onKeyDown={(e) => handleKeyDown(idx, e)}
+                  className="w-14 h-14 text-center text-xl font-black rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-600 focus:border-blue-600 outline-none transition-all shadow-2xs"
+                />
+              ))}
+            </div>
+          </div>
+
+          {/* Botón Principal Azul: Confirmar e ingresar */}
           <button
-            type="button"
-            onClick={() => setIsRegisterOpen(true)}
-            className="text-xs font-extrabold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+            type="submit"
+            disabled={isLoading}
+            className="w-full h-12 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs tracking-wide shadow-md shadow-blue-600/20 transition-all flex items-center justify-center space-x-2 cursor-pointer"
           >
-            ¿Docente nuevo? Crear cuenta aquí
+            {isLoading ? (
+              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <span>Confirmar e ingresar</span>
+            )}
           </button>
-        </div>
 
-        {/* Botón 2: Solicitar Acceso por WhatsApp (Verde Esmeralda CTA) */}
+          {/* Nota Informativa con icono amarillo */}
+          <div className="flex items-start space-x-2 text-[11px] text-slate-500 dark:text-slate-400">
+            <span className="w-4 h-4 rounded-full bg-amber-400 text-slate-950 font-bold flex items-center justify-center shrink-0 mt-0.5 text-[10px]">
+              ?
+            </span>
+            <span className="leading-tight">
+              Revisa también la carpeta de spam o correo no deseado.
+            </span>
+          </div>
+
+          {/* Enlace de Reenvío de código */}
+          {isTimerActive && (
+            <div className="text-center pt-1">
+              <span className="text-[11px] font-medium text-slate-400">
+                Reenviar código en {timer}s
+              </span>
+            </div>
+          )}
+        </form>
+      )}
+
+      <div className="h-px bg-slate-100 dark:bg-slate-800 my-2" />
+
+      {/* Botón Verde CTA: SOLICITAR ACCESO POR WHATSAPP */}
+      <div className="space-y-2">
         <a
           href={whatsappUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="w-full h-12 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs tracking-wide shadow-md shadow-emerald-600/20 transition-all flex items-center justify-center space-x-2"
+          className="w-full h-12 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs tracking-wide shadow-md shadow-emerald-600/20 transition-all flex items-center justify-center space-x-2 cursor-pointer"
         >
-          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+          <svg className="w-5 h-5 text-white shrink-0" fill="currentColor" viewBox="0 0 24 24">
             <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-1.099 4.019 4.142-1.086z" />
           </svg>
           <span>SOLICITAR ACCESO POR WHATSAPP</span>
         </a>
-      </div>
 
-      {/* Modales Accesibles */}
-      <RegisterModal isOpen={isRegisterOpen} onClose={() => setIsRegisterOpen(false)} />
-      <ForgotPasswordModal isOpen={isForgotOpen} onClose={() => setIsForgotOpen(false)} />
-    </>
+        {/* Subtexto Informativo Inferior */}
+        <p className="text-[10px] text-center text-slate-400 italic leading-snug">
+          El acceso es gratuito para los docentes suscritos en la plataforma AVEND ESCALA desde julio del 2026.
+        </p>
+      </div>
+    </div>
   );
 };

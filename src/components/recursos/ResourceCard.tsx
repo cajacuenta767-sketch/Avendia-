@@ -1,7 +1,7 @@
 // src/components/recursos/ResourceCard.tsx
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { ColorTheme, Recurso } from '@/types/recurso';
 
 interface ResourceCardProps {
@@ -9,7 +9,6 @@ interface ResourceCardProps {
   onOpenPdf: (recurso: Recurso) => void;
 }
 
-// Mapa de temas de color Tailwind CSS (fondos pastel y acentos)
 const THEME_STYLES: Record<
   ColorTheme,
   {
@@ -79,67 +78,99 @@ const THEME_STYLES: Record<
 };
 
 export const ResourceCard: React.FC<ResourceCardProps> = ({ recurso, onOpenPdf }) => {
+  const [imageError, setImageError] = useState(false);
   const theme = THEME_STYLES[recurso.colorTheme] || THEME_STYLES.purple;
   const numFormatted = String(recurso.numero).padStart(2, '0');
+
+  const hasValidImage = Boolean(recurso.urlImagen) && !imageError;
 
   return (
     <article
       className={`group relative flex flex-col justify-between bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-3xl overflow-hidden shadow-sm hover:shadow-md transition-all duration-200 ${theme.cardBorder}`}
     >
-      {/* 1. Franja Superior de Color Temático */}
-      <div className={`h-3 w-full ${theme.headerBg}`} />
+      {/* 1. Cabecera con Miniatura Visual (Imagen Subida o Formato Automático AVEND ESCALA) */}
+      {hasValidImage ? (
+        <div className="relative w-full h-44 overflow-hidden bg-slate-100 dark:bg-slate-800">
+          <img
+            src={recurso.urlImagen}
+            alt={recurso.titulo}
+            onError={() => setImageError(true)}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+          />
+          <span className="absolute top-3 left-3 text-[10px] font-black uppercase text-white bg-slate-900/70 backdrop-blur-xs px-2.5 py-1 rounded-full tracking-wider">
+            RECURSO #{numFormatted}
+          </span>
+        </div>
+      ) : (
+        <div className={`relative w-full h-36 ${theme.headerBg} flex flex-col justify-between p-4 overflow-hidden`}>
+          {/* Fondo vectorial estilizado AVEND */}
+          <div className="absolute -right-6 -bottom-6 w-28 h-28 rounded-full bg-white/10 blur-xs pointer-events-none" />
 
-      {/* 2. Cuerpo de la Tarjeta */}
-      <div className="p-6 space-y-4 flex-1 flex flex-col justify-between">
-        <div className="space-y-3">
-          {/* Fila de Badges */}
-          <div className="flex items-center justify-between gap-2">
-            <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-[11px] font-extrabold tracking-wider uppercase bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">
+          <div className="flex items-center justify-between text-white/90 z-10">
+            <span className="text-[10px] font-black uppercase tracking-wider bg-black/20 backdrop-blur-xs px-2.5 py-1 rounded-md border border-white/20">
               RECURSO #{numFormatted}
             </span>
+            <span className="text-[10px] font-extrabold text-white/80 uppercase tracking-widest">AVEND</span>
+          </div>
 
-            <div className="flex items-center space-x-2">
+          <div className="flex items-center justify-center z-10">
+            <div className="w-11 h-11 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/30 shadow-xs">
+              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+              </svg>
+            </div>
+          </div>
+
+          <div className="flex justify-end z-10">
+            <span className="text-[9px] font-black text-white/70 uppercase tracking-widest">AVEND ESCALA</span>
+          </div>
+        </div>
+      )}
+
+      {/* 2. Cuerpo de la Tarjeta */}
+      <div className="p-5 space-y-3.5 flex-1 flex flex-col justify-between">
+        <div className="space-y-2.5">
+          {/* Fila de Badges */}
+          <div className="flex items-center justify-between gap-2">
+            <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400">
+              {recurso.categoriaLabel}
+            </span>
+
+            <div className="flex items-center space-x-1.5">
               {recurso.isPopular && (
-                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
                   🔥 Destacado
                 </span>
               )}
-              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-semibold ${theme.badgeBg} ${theme.badgeText}`}>
+              <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold ${theme.badgeBg} ${theme.badgeText}`}>
                 {recurso.paginas} págs
               </span>
             </div>
           </div>
 
           {/* Título Principal */}
-          <h3 className="text-lg font-bold text-gray-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors line-clamp-2 leading-snug">
+          <h3 className="text-base font-bold text-gray-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors line-clamp-2 leading-snug">
             {recurso.titulo}
           </h3>
 
           {/* Descripción Corta */}
-          <p className="text-xs text-gray-600 dark:text-gray-400 line-clamp-3 leading-relaxed">
+          <p className="text-xs text-gray-600 dark:text-gray-400 line-clamp-2 leading-relaxed">
             {recurso.descripcion}
           </p>
-
-          {/* Categoria Badge */}
-          <div className="pt-1">
-            <span className="inline-block px-2.5 py-1 rounded-md text-[11px] font-semibold bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400">
-              {recurso.categoriaLabel}
-            </span>
-          </div>
         </div>
 
         {/* 3. Botón de Acción Principal */}
-        <div className="pt-4 border-t border-gray-100 dark:border-gray-800">
+        <div className="pt-3 border-t border-gray-100 dark:border-gray-800">
           <button
             type="button"
             onClick={() => onOpenPdf(recurso)}
-            className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl ${theme.btnBg} ${theme.btnText} ${theme.btnHoverBg} text-xs font-bold transition-all border border-gray-200/50 dark:border-gray-800`}
+            className={`w-full flex items-center justify-between px-4 py-2.5 rounded-xl ${theme.btnBg} ${theme.btnText} ${theme.btnHoverBg} text-xs font-bold transition-all border border-gray-200/50 dark:border-gray-800 cursor-pointer`}
           >
             <div className="flex items-center space-x-2">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
-              <span>VER FICHA PEDAGÓGICA</span>
+              <span>VER RECURSO</span>
             </div>
             <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded bg-white/70 dark:bg-black/30 shadow-xs">
               PDF

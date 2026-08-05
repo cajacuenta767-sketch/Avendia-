@@ -13,7 +13,7 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
   isOpen,
   onClose,
 }) => {
-  const [emailOrDni, setEmailOrDni] = useState('');
+  const [email, setEmail] = useState('');
   const [isSuccess, setIsSuccess] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -24,8 +24,8 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
     e.preventDefault();
     setErrorMessage('');
 
-    if (!emailOrDni.trim()) {
-      setErrorMessage('Ingresa tu DNI o Correo electrónico');
+    if (!email.trim() || !email.includes('@')) {
+      setErrorMessage('Ingresa un correo electrónico válido');
       return;
     }
 
@@ -37,7 +37,7 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
     }, 700);
   };
 
-  const whatsappMessage = `Hola AVEND ESCALA, solicito el restablecimiento de mi PIN para el DNI/Correo: ${emailOrDni || '[Escribir DNI/Correo]'}`;
+  const whatsappMessage = `Hola AVEND ESCALA, solicito el restablecimiento de mi PIN para el correo: ${email || '[Escribir Correo]'}`;
   const whatsappUrl = getWhatsAppLink(whatsappMessage);
 
   return (
@@ -67,7 +67,7 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
                 ¿Olvidaste tu PIN de acceso?
               </h3>
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 leading-relaxed">
-                Ingresa tu DNI o correo registrado para recibir un código de restablecimiento o solicita ayuda directa por WhatsApp.
+                Ingresa tu correo registrado para recibir un código de restablecimiento o solicita ayuda directa por WhatsApp.
               </p>
             </div>
 
@@ -80,13 +80,14 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
 
               <div className="space-y-1">
                 <label className="text-xs font-bold text-gray-700 dark:text-gray-300">
-                  DNI o Correo Electrónico
+                  Correo Electrónico *
                 </label>
                 <input
-                  type="text"
-                  value={emailOrDni}
-                  onChange={(e) => setEmailOrDni(e.target.value)}
-                  placeholder="ejemplo@docente.pe o 71234567"
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="ejemplo@docente.pe"
                   className="w-full h-11 px-3.5 rounded-xl border border-gray-300 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800 text-gray-900 dark:text-white text-xs font-medium focus:ring-2 focus:ring-amber-500 outline-none"
                 />
               </div>
@@ -123,7 +124,6 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
             </a>
           </>
         ) : (
-          /* Mensaje de Confirmación */
           <div className="py-6 text-center space-y-4">
             <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-950 dark:text-emerald-300 mx-auto flex items-center justify-center">
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -134,7 +134,7 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
               Solicitud recibida correctamente
             </h4>
             <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
-              Hemos enviado las instrucciones para restablecer tu PIN al correo o celular asociado a {emailOrDni}.
+              Hemos enviado las instrucciones para restablecer tu PIN al correo electrónico asociado a {email}.
             </p>
             <button
               type="button"
