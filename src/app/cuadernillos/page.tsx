@@ -36,61 +36,61 @@ const PROCESS_THEMES: Record<ProcesoMinedu, ProcessThemeConfig> = {
     name: 'Nombramiento',
     breadcrumb: 'Nombramiento',
     highlight: 'Nombramiento',
-    titleColor: 'text-[#B45309] dark:text-amber-400',
-    badgeBg: 'bg-[#B45309] text-white',
-    buttonBg: 'bg-[#C25E00] hover:bg-[#A85100]',
-    headerBg: 'bg-[#FFF9F4] dark:bg-amber-950/20',
-    accentBar: 'bg-[#B45309]',
-    proximamenteBadge: 'bg-amber-100 text-amber-900 border-amber-200',
-    numBg: 'bg-[#B45309]',
+    titleColor: 'text-purple-600 dark:text-purple-400 font-black',
+    badgeBg: 'bg-purple-600 text-white',
+    buttonBg: 'bg-purple-600 hover:bg-purple-700',
+    headerBg: 'bg-purple-50/70 dark:bg-purple-950/20 border-purple-100/80',
+    accentBar: 'bg-purple-600',
+    proximamenteBadge: 'bg-purple-100 text-purple-900 border-purple-200',
+    numBg: 'bg-purple-600',
   },
   ASCENSO_ESCALAFON: {
     name: 'Ascenso',
     breadcrumb: 'Ascenso',
     highlight: 'Ascenso',
-    titleColor: 'text-[#5B46F6] dark:text-indigo-400',
-    badgeBg: 'bg-[#5B46F6] text-white',
-    buttonBg: 'bg-[#5B46F6] hover:bg-[#4935E4]',
-    headerBg: 'bg-[#F8F7FF] dark:bg-indigo-950/20',
-    accentBar: 'bg-[#5B46F6]',
-    proximamenteBadge: 'bg-indigo-100 text-indigo-900 border-indigo-200',
-    numBg: 'bg-[#5B46F6]',
+    titleColor: 'text-[#2563eb] dark:text-blue-400',
+    badgeBg: 'bg-blue-600 text-white',
+    buttonBg: 'bg-[#2563eb] hover:bg-[#1d4ed8]',
+    headerBg: 'bg-[#eff6ff] dark:bg-blue-950/20 border-blue-100',
+    accentBar: 'bg-[#2563eb]',
+    proximamenteBadge: 'bg-blue-100 text-blue-900 border-blue-200',
+    numBg: 'bg-[#2563eb]',
   },
   ACCESO_CARGOS_DIRECTIVOS: {
     name: 'Directivos',
     breadcrumb: 'Directivos',
     highlight: 'Directivos',
-    titleColor: 'text-[#0D9488] dark:text-teal-400',
-    badgeBg: 'bg-[#0D9488] text-white',
-    buttonBg: 'bg-[#0D9488] hover:bg-[#0B7A70]',
-    headerBg: 'bg-[#F2FCFA] dark:bg-teal-950/20',
-    accentBar: 'bg-[#0D9488]',
-    proximamenteBadge: 'bg-teal-100 text-teal-900 border-teal-200',
-    numBg: 'bg-[#0D9488]',
+    titleColor: 'text-[#16a34a] dark:text-emerald-400',
+    badgeBg: 'bg-emerald-600 text-white',
+    buttonBg: 'bg-[#16a34a] hover:bg-[#15803d]',
+    headerBg: 'bg-[#f0fdf4] dark:bg-emerald-950/20 border-emerald-100',
+    accentBar: 'bg-[#16a34a]',
+    proximamenteBadge: 'bg-emerald-100 text-emerald-900 border-emerald-200',
+    numBg: 'bg-[#16a34a]',
   },
   INGRESO_CPM: {
     name: 'Ingreso CPM',
     breadcrumb: 'Ingreso CPM',
     highlight: 'Ingreso CPM',
-    titleColor: 'text-[#B45309]',
-    badgeBg: 'bg-[#B45309] text-white',
-    buttonBg: 'bg-[#C25E00]',
-    headerBg: 'bg-[#FFF9F4]',
-    accentBar: 'bg-[#B45309]',
+    titleColor: 'text-[#c2410c]',
+    badgeBg: 'bg-purple-600 text-white',
+    buttonBg: 'bg-[#c2410c]',
+    headerBg: 'bg-[#fffbeb]',
+    accentBar: 'bg-[#c2410c]',
     proximamenteBadge: 'bg-amber-100 text-amber-900',
-    numBg: 'bg-[#B45309]',
+    numBg: 'bg-[#c2410c]',
   },
   REASIGNACION_DOCENTE: {
     name: 'Reasignación',
     breadcrumb: 'Reasignación',
     highlight: 'Reasignación',
-    titleColor: 'text-[#B45309]',
-    badgeBg: 'bg-[#B45309] text-white',
-    buttonBg: 'bg-[#C25E00]',
-    headerBg: 'bg-[#FFF9F4]',
-    accentBar: 'bg-[#B45309]',
+    titleColor: 'text-[#c2410c]',
+    badgeBg: 'bg-purple-600 text-white',
+    buttonBg: 'bg-[#c2410c]',
+    headerBg: 'bg-[#fffbeb]',
+    accentBar: 'bg-[#c2410c]',
     proximamenteBadge: 'bg-amber-100 text-amber-900',
-    numBg: 'bg-[#B45309]',
+    numBg: 'bg-[#c2410c]',
   },
 };
 
@@ -99,20 +99,20 @@ function CuadernillosContent() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  // Leer estado inicial desde la URL
+  // Leer estado inicial desde la URL (o iniciar vacio para requerir seleccion consciente del usuario)
   const initialProceso = (searchParams.get('proceso') as ProcesoMinedu) || 'NOMBRAMIENTO_DOCENTE';
-  const initialModalidad = (searchParams.get('modalidad') as ModalidadEducativa) || 'TODOS';
-  const initialNivel = (searchParams.get('nivel') as NivelEducativo) || 'TODOS';
-  const initialEspecialidad = searchParams.get('especialidad') || 'TODOS';
+  const initialModalidad = (searchParams.get('modalidad') as ModalidadEducativa) || '';
+  const initialNivel = (searchParams.get('nivel') as NivelEducativo) || '';
+  const initialEspecialidad = searchParams.get('especialidad') || '';
   const initialAnioParam = searchParams.get('anio');
-  const initialAnio = initialAnioParam && initialAnioParam !== 'TODOS' ? Number(initialAnioParam) : 'TODOS';
+  const initialAnio = initialAnioParam && initialAnioParam !== 'TODOS' ? Number(initialAnioParam) : '';
 
   const [filters, setFilters] = useState<EvaluacionesFilterParams>({
     proceso: initialProceso,
     modalidad: initialModalidad,
     nivel: initialNivel,
     especialidad: initialEspecialidad,
-    anio: initialAnio,
+    anio: initialAnio as any,
     searchQuery: '',
   });
 
@@ -168,15 +168,16 @@ function CuadernillosContent() {
   }, [pathname, router]);
 
   const fetchEvaluaciones = useCallback(async () => {
-    setIsLoading(true);
+    // Si ya existen cuadernillos cargados, no se muestran bloques grises al cambiar filtros
+    if (evaluaciones.length === 0) {
+      setIsLoading(true);
+    }
     const response = await getEvaluacionesAction(filters);
-    if (response.success) {
+    if (response.success && response.data.length > 0) {
       setEvaluaciones(response.data);
-    } else {
-      console.error(response.error.message);
     }
     setIsLoading(false);
-  }, [filters]);
+  }, [filters, evaluaciones.length]);
 
   useEffect(() => {
     fetchEvaluaciones();

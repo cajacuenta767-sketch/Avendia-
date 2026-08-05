@@ -25,7 +25,7 @@ const PROCESS_ITEMS: ProcessOptionItem[] = [
     badge: 'CPM',
     iconSvg: (
       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
       </svg>
     ),
   },
@@ -43,11 +43,11 @@ const PROCESS_ITEMS: ProcessOptionItem[] = [
   {
     id: 'ACCESO_CARGOS_DIRECTIVOS',
     title: 'Directivos',
-    subtitle: 'Cargos de gestión',
+    subtitle: 'Cargos de gestión educativa',
     badge: 'Gestión',
     iconSvg: (
       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
       </svg>
     ),
   },
@@ -61,39 +61,39 @@ const PROCESS_THEMES: Record<ProcesoMinedu, {
   titleSelected: string;
 }> = {
   NOMBRAMIENTO_DOCENTE: {
-    numBg: 'bg-[#B45309]',
-    cardBorder: 'border-[#B45309]',
-    cardBgSelected: 'bg-[#FFF8F0] dark:bg-amber-950/30',
-    iconBgSelected: 'bg-[#B45309] text-white',
-    titleSelected: 'text-[#B45309] dark:text-amber-300',
+    numBg: 'bg-purple-600',
+    cardBorder: 'border-purple-600 ring-2 ring-purple-500/20',
+    cardBgSelected: 'bg-purple-50/70 dark:bg-purple-950/40',
+    iconBgSelected: 'bg-purple-600 text-white',
+    titleSelected: 'text-purple-700 dark:text-purple-300 font-extrabold',
   },
   ASCENSO_ESCALAFON: {
-    numBg: 'bg-[#5B46F6]',
-    cardBorder: 'border-[#5B46F6]',
-    cardBgSelected: 'bg-[#F3F0FF] dark:bg-indigo-950/30',
-    iconBgSelected: 'bg-[#5B46F6] text-white',
-    titleSelected: 'text-[#5B46F6] dark:text-indigo-300',
+    numBg: 'bg-blue-600',
+    cardBorder: 'border-blue-600 ring-2 ring-blue-500/20',
+    cardBgSelected: 'bg-blue-50/70 dark:bg-blue-950/40',
+    iconBgSelected: 'bg-blue-600 text-white',
+    titleSelected: 'text-blue-700 dark:text-blue-300 font-extrabold',
   },
   ACCESO_CARGOS_DIRECTIVOS: {
-    numBg: 'bg-[#0D9488]',
-    cardBorder: 'border-[#0D9488]',
-    cardBgSelected: 'bg-[#F0FAF8] dark:bg-teal-950/30',
-    iconBgSelected: 'bg-[#0D9488] text-white',
-    titleSelected: 'text-[#0D9488] dark:text-teal-300',
+    numBg: 'bg-emerald-600',
+    cardBorder: 'border-emerald-600 ring-2 ring-emerald-500/20',
+    cardBgSelected: 'bg-emerald-50/70 dark:bg-emerald-950/40',
+    iconBgSelected: 'bg-emerald-600 text-white',
+    titleSelected: 'text-emerald-700 dark:text-emerald-300 font-extrabold',
   },
   INGRESO_CPM: {
-    numBg: 'bg-[#B45309]',
-    cardBorder: 'border-[#B45309]',
-    cardBgSelected: 'bg-[#FFF8F0]',
-    iconBgSelected: 'bg-[#B45309] text-white',
-    titleSelected: 'text-[#B45309]',
+    numBg: 'bg-purple-600',
+    cardBorder: 'border-purple-600',
+    cardBgSelected: 'bg-purple-50',
+    iconBgSelected: 'bg-purple-600 text-white',
+    titleSelected: 'text-purple-700',
   },
   REASIGNACION_DOCENTE: {
-    numBg: 'bg-[#B45309]',
-    cardBorder: 'border-[#B45309]',
-    cardBgSelected: 'bg-[#FFF8F0]',
-    iconBgSelected: 'bg-[#B45309] text-white',
-    titleSelected: 'text-[#B45309]',
+    numBg: 'bg-purple-600',
+    cardBorder: 'border-purple-600',
+    cardBgSelected: 'bg-purple-50',
+    iconBgSelected: 'bg-purple-600 text-white',
+    titleSelected: 'text-purple-700',
   },
 };
 
@@ -114,7 +114,7 @@ export const ProcessSelector: React.FC<ProcessSelectorProps> = ({
           <h2 className="text-sm sm:text-base font-bold text-gray-900 dark:text-white tracking-tight">
             Elige el proceso
           </h2>
-          <p className="text-[11px] text-gray-400 dark:text-slate-500">
+          <p className="text-[11px] text-gray-400 dark:text-slate-500 font-medium">
             Comienza seleccionando el concurso que estás preparando.
           </p>
         </div>
@@ -133,7 +133,7 @@ export const ProcessSelector: React.FC<ProcessSelectorProps> = ({
               onClick={() => onSelectProceso(item.id)}
               className={`relative flex items-center space-x-3 p-3.5 rounded-xl border transition-all duration-300 cursor-pointer ${
                 isSelected
-                  ? `${theme.cardBorder} ${theme.cardBgSelected} shadow-xs ring-1 ring-black/5`
+                  ? `${theme.cardBorder} ${theme.cardBgSelected} shadow-xs`
                   : 'border-gray-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-gray-300 dark:hover:border-slate-700'
               }`}
             >
@@ -159,7 +159,7 @@ export const ProcessSelector: React.FC<ProcessSelectorProps> = ({
                 >
                   {item.title}
                 </h3>
-                <p className="text-[10px] text-gray-400 dark:text-slate-400 leading-tight line-clamp-1 mt-0.5">
+                <p className="text-[10px] text-gray-400 dark:text-slate-400 leading-tight line-clamp-1 mt-0.5 font-medium">
                   {item.subtitle}
                 </p>
               </div>

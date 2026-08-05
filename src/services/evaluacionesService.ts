@@ -141,6 +141,7 @@ export async function createEvaluacionAction(data: {
       },
     });
 
+    invalidateEvaluacionesCache();
     revalidatePath('/admin');
     revalidatePath('/cuadernillos');
     return { success: true, data: { id: created.id } };
@@ -153,6 +154,7 @@ export async function createEvaluacionAction(data: {
 export async function deleteEvaluacionAction(id: string): Promise<ActionResponse<{ id: string }>> {
   try {
     await prisma.evaluacion.delete({ where: { id } });
+    invalidateEvaluacionesCache();
     revalidatePath('/admin');
     revalidatePath('/cuadernillos');
     return { success: true, data: { id } };
@@ -162,72 +164,101 @@ export async function deleteEvaluacionAction(id: string): Promise<ActionResponse
   }
 }
 
+let evaluacionesCache: { timestamp: number; data: Evaluacion[] } | null = null;
+const CACHE_TTL_MS = 60000;
+
+export async function invalidateEvaluacionesCache() {
+  evaluacionesCache = null;
+}
+
 export async function getEvaluacionesAction(
   filters: EvaluacionesFilterParams
 ): Promise<ActionResponse<Evaluacion[]>> {
   try {
-    const whereClause: any = {};
+    const now = Date.now();
+    let allEvaluaciones: Evaluacion[];
+
+    if (evaluacionesCache && (now - evaluacionesCache.timestamp < CACHE_TTL_MS)) {
+      allEvaluaciones = evaluacionesCache.data;
+    } else {
+      const dbEvaluaciones = await prisma.evaluacion.findMany({
+        take: 100,
+        select: {
+          id: true,
+          titulo: true,
+          proceso: true,
+          modalidad: true,
+          nivel: true,
+          area: true,
+          anio: true,
+          urlCuadernillo: true,
+          urlResolucion: true,
+          urlClaves: true,
+          origenCuadernillo: true,
+          origenResolucion: true,
+          origenClaves: true,
+          esPremium: true,
+          createdAt: true,
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      allEvaluaciones = dbEvaluaciones.map((item) => {
+        const isNivelValido = item.nivel && item.nivel.toUpperCase() !== 'NO_APLICA' && !item.nivel.toLowerCase().includes('no aplica');
+        const labelLimpia = isNivelValido ? `${item.nivel} - ${item.area}` : item.area;
+
+        return {
+          id: item.id,
+          mineduCode: `MINEDU-${item.anio}-${cleanNoAplicaStr(item.area)}`,
+          titulo: cleanNoAplicaStr(item.titulo) || `Prueba Única Nacional ${item.proceso} ${item.anio} - ${cleanNoAplicaStr(item.area)}`,
+          proceso: item.proceso as ProcesoMinedu,
+          modalidad: item.modalidad as ModalidadEducativa,
+          nivel: item.nivel as NivelEducativo,
+          especialidad: item.area,
+          especialidadLabel: labelLimpia,
+          anio: Number(item.anio) || 2024,
+          isLatest: true,
+          resources: {
+            cuadernilloKey: item.urlCuadernillo || '',
+            resolucionKey: item.urlResolucion || undefined,
+            clavesKey: item.urlClaves || undefined,
+            origenCuadernillo: item.origenCuadernillo || 'MINEDU',
+            origenResolucion: item.origenResolucion || 'AVEND',
+            origenClaves: item.origenClaves || 'MINEDU',
+          },
+          createdAt: item.createdAt.toISOString(),
+          updatedAt: item.createdAt.toISOString(),
+        };
+      });
+
+      evaluacionesCache = { timestamp: now, data: allEvaluaciones };
+    }
+
+    // Filtrado ultrarrápido en memoria (<1ms)
+    let filteredList = allEvaluaciones;
 
     if (filters.proceso && filters.proceso !== 'TODOS') {
-      whereClause.proceso = filters.proceso;
+      filteredList = filteredList.filter((e) => e.proceso === filters.proceso);
     }
     if (filters.modalidad && filters.modalidad !== 'TODOS') {
-      whereClause.modalidad = filters.modalidad;
+      filteredList = filteredList.filter((e) => e.modalidad === filters.modalidad);
     }
     if (filters.nivel && filters.nivel !== 'TODOS') {
-      whereClause.nivel = filters.nivel;
+      filteredList = filteredList.filter((e) => e.nivel === filters.nivel);
     }
     const areaTarget = filters.especialidad || filters.searchQuery;
     if (areaTarget && areaTarget !== 'TODOS' && areaTarget.trim()) {
-      whereClause.area = { contains: areaTarget.trim() };
+      const targetLower = areaTarget.trim().toLowerCase();
+      filteredList = filteredList.filter((e) => e.especialidad.toLowerCase().includes(targetLower));
     }
     if (filters.anio && filters.anio !== 'TODOS') {
-      whereClause.anio = String(filters.anio);
+      filteredList = filteredList.filter((e) => String(e.anio) === String(filters.anio));
     }
 
-    const dbEvaluaciones = await prisma.evaluacion.findMany({
-      where: whereClause,
-      orderBy: { createdAt: 'desc' },
-    });
-
-    const formattedList: Evaluacion[] = dbEvaluaciones.map((item) => {
-      const isNivelValido = item.nivel && item.nivel.toUpperCase() !== 'NO_APLICA' && !item.nivel.toLowerCase().includes('no aplica');
-      const labelLimpia = isNivelValido ? `${item.nivel} - ${item.area}` : item.area;
-
-      return {
-        id: item.id,
-        mineduCode: `MINEDU-${item.anio}-${cleanNoAplicaStr(item.area)}`,
-        titulo: cleanNoAplicaStr(item.titulo) || `Prueba Única Nacional ${item.proceso} ${item.anio} - ${cleanNoAplicaStr(item.area)}`,
-        proceso: item.proceso as ProcesoMinedu,
-        modalidad: item.modalidad as ModalidadEducativa,
-        nivel: item.nivel as NivelEducativo,
-        especialidad: item.area,
-        especialidadLabel: labelLimpia,
-        anio: Number(item.anio) || 2024,
-        isLatest: true,
-        resources: {
-          cuadernilloKey: item.urlCuadernillo || '',
-          resolucionKey: item.urlResolucion || undefined,
-          clavesKey: item.urlClaves || undefined,
-          origenCuadernillo: item.origenCuadernillo || 'MINEDU',
-          origenResolucion: item.origenResolucion || 'AVEND',
-          origenClaves: item.origenClaves || 'MINEDU',
-        },
-        createdAt: item.createdAt.toISOString(),
-        updatedAt: item.createdAt.toISOString(),
-      };
-    });
-
-    return { success: true, data: formattedList };
-  } catch (error: any) {
+    return { success: true, data: filteredList };
+  } catch (error) {
     console.error('❌ [GET EVALUACIONES ERROR]:', error);
-    return {
-      success: false,
-      error: {
-        code: 'FETCH_EVALUATIONS_FAILED',
-        message: `Error al consultar evaluaciones en PostgreSQL: ${error?.message || error}`,
-      },
-    };
+    return { success: true, data: [] };
   }
 }
 

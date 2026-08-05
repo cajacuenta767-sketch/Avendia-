@@ -130,39 +130,39 @@ const PROCESO_THEMES: Record<ProcesoMinedu, {
   iconColor: string;
 }> = {
   NOMBRAMIENTO_DOCENTE: {
-    numBg: 'bg-[#B45309]',
-    infoBg: 'bg-[#FFF8F0] dark:bg-amber-950/30',
-    infoBorder: 'border-[#B45309]/30',
-    infoText: 'text-[#B45309] dark:text-amber-200',
-    iconColor: 'text-[#B45309]',
+    numBg: 'bg-purple-600',
+    infoBg: 'bg-purple-50/70 dark:bg-purple-950/30',
+    infoBorder: 'border-purple-200/80',
+    infoText: 'text-purple-700 dark:text-purple-300',
+    iconColor: 'text-purple-600',
   },
   ASCENSO_ESCALAFON: {
-    numBg: 'bg-[#5B46F6]',
-    infoBg: 'bg-[#F3F0FF] dark:bg-indigo-950/30',
-    infoBorder: 'border-[#5B46F6]/30',
-    infoText: 'text-[#5B46F6] dark:text-indigo-200',
-    iconColor: 'text-[#5B46F6]',
+    numBg: 'bg-blue-600',
+    infoBg: 'bg-blue-50/70 dark:bg-blue-950/30',
+    infoBorder: 'border-blue-200/80',
+    infoText: 'text-blue-700 dark:text-blue-300',
+    iconColor: 'text-blue-600',
   },
   ACCESO_CARGOS_DIRECTIVOS: {
-    numBg: 'bg-[#0D9488]',
-    infoBg: 'bg-[#F0FAF8] dark:bg-teal-950/30',
-    infoBorder: 'border-[#0D9488]/30',
-    infoText: 'text-[#0D9488] dark:text-teal-200',
-    iconColor: 'text-[#0D9488]',
+    numBg: 'bg-emerald-600',
+    infoBg: 'bg-emerald-50/70 dark:bg-emerald-950/30',
+    infoBorder: 'border-emerald-200/80',
+    infoText: 'text-emerald-700 dark:text-emerald-300',
+    iconColor: 'text-emerald-600',
   },
   INGRESO_CPM: {
-    numBg: 'bg-[#B45309]',
-    infoBg: 'bg-[#FFF8F0]',
-    infoBorder: 'border-[#B45309]/30',
-    infoText: 'text-[#B45309]',
-    iconColor: 'text-[#B45309]',
+    numBg: 'bg-purple-600',
+    infoBg: 'bg-purple-50',
+    infoBorder: 'border-purple-200',
+    infoText: 'text-purple-700',
+    iconColor: 'text-purple-600',
   },
   REASIGNACION_DOCENTE: {
-    numBg: 'bg-[#B45309]',
-    infoBg: 'bg-[#FFF8F0]',
-    infoBorder: 'border-[#B45309]/30',
-    infoText: 'text-[#B45309]',
-    iconColor: 'text-[#B45309]',
+    numBg: 'bg-purple-600',
+    infoBg: 'bg-purple-50',
+    infoBorder: 'border-purple-200',
+    infoText: 'text-purple-700',
+    iconColor: 'text-purple-600',
   },
 };
 
@@ -175,102 +175,82 @@ export const CascadingFilters: React.FC<CascadingFiltersProps> = ({
 }) => {
   const isDirectivos = activeProceso === 'ACCESO_CARGOS_DIRECTIVOS';
 
-  const currentModalidad: ModalidadEducativa = 
-    filters.modalidad && filters.modalidad !== 'TODOS' ? (filters.modalidad as ModalidadEducativa) : 'EBR';
+  const currentModalidad = (filters.modalidad && filters.modalidad !== 'TODOS') ? filters.modalidad : '';
 
   const nivelesDisponibles = useMemo(() => {
     if (isDirectivos) return [];
-    const permitidos = NIVELES_POR_MODALIDAD[currentModalidad] || NIVELES_POR_MODALIDAD.EBR;
+    const targetModalidad = (currentModalidad as ModalidadEducativa) || 'EBR';
+    const permitidos = NIVELES_POR_MODALIDAD[targetModalidad] || NIVELES_POR_MODALIDAD.EBR;
     return NIVELES_MAESTROS.filter((n) => permitidos.includes(n.value));
   }, [currentModalidad, isDirectivos]);
 
   const currentNivel = useMemo(() => {
     if (isDirectivos) return 'NO_APLICA';
-    if (filters.nivel && filters.nivel !== 'TODOS' && nivelesDisponibles.some(n => n.value === filters.nivel)) {
+    if (filters.nivel && filters.nivel !== 'TODOS') {
       return filters.nivel;
     }
-    return nivelesDisponibles[0]?.value || 'INICIAL';
-  }, [filters.nivel, nivelesDisponibles, isDirectivos]);
+    return '';
+  }, [filters.nivel, isDirectivos]);
 
   const especialidadesDisponibles = useMemo(() => {
     if (isDirectivos) return ESPECIALIDADES_DIRECTIVOS_LIST;
-    const permitidos = ESPECIALIDADES_POR_NIVEL[currentNivel] || ESPECIALIDADES_POR_NIVEL.INICIAL;
+    const targetNivel = currentNivel || 'INICIAL';
+    const permitidos = ESPECIALIDADES_POR_NIVEL[targetNivel] || ESPECIALIDADES_POR_NIVEL.INICIAL;
     return ESPECIALIDADES_MAESTRAS.filter((e) => permitidos.includes(e.value));
   }, [currentNivel, isDirectivos]);
 
   const currentEspecialidad = useMemo(() => {
     if (isDirectivos) {
-      if (filters.especialidad && filters.especialidad !== 'TODOS' && especialidadesDisponibles.some(e => e.value === filters.especialidad || e.label === filters.especialidad)) {
+      if (filters.especialidad && filters.especialidad !== 'TODOS') {
         return filters.especialidad;
       }
-      return 'ACCESO_DIRECTIVOS';
+      return '';
     }
-    if (filters.especialidad && filters.especialidad !== 'TODOS' && especialidadesDisponibles.some(e => e.value === filters.especialidad)) {
+    if (filters.especialidad && filters.especialidad !== 'TODOS') {
       return filters.especialidad;
     }
-    return especialidadesDisponibles[0]?.value || 'INICIAL_GENERAL';
-  }, [filters.especialidad, especialidadesDisponibles, isDirectivos]);
+    return '';
+  }, [filters.especialidad, isDirectivos]);
 
-  const currentAnio = filters.anio && filters.anio !== 'TODOS' ? Number(filters.anio) : 2024;
+  const currentAnio = (filters.anio && filters.anio !== 'TODOS') ? String(filters.anio) : '';
 
   const theme = PROCESO_THEMES[activeProceso] || PROCESO_THEMES.NOMBRAMIENTO_DOCENTE;
 
   const handleModalidadChange = (nuevaModalidadStr: string) => {
     const nuevaModalidad = nuevaModalidadStr as ModalidadEducativa;
-    if (isDirectivos) {
-      onFilterChange({
-        ...filters,
-        modalidad: nuevaModalidad,
-        nivel: 'NO_APLICA' as NivelEducativo,
-        especialidad: currentEspecialidad,
-        anio: currentAnio,
-      });
-      return;
-    }
-    const niveles = NIVELES_POR_MODALIDAD[nuevaModalidad] || NIVELES_POR_MODALIDAD.EBR;
-    const primerNivel = niveles[0] || 'INICIAL';
-    const especialidades = ESPECIALIDADES_POR_NIVEL[primerNivel] || ESPECIALIDADES_POR_NIVEL.INICIAL;
-    const primeraEspecialidad = especialidades[0] || 'INICIAL_GENERAL';
-
     onFilterChange({
       ...filters,
       modalidad: nuevaModalidad,
-      nivel: primerNivel as NivelEducativo,
-      especialidad: primeraEspecialidad,
-      anio: currentAnio,
+      nivel: isDirectivos ? ('NO_APLICA' as NivelEducativo) : ('' as any),
+      especialidad: '',
     });
   };
 
   const handleNivelChange = (nuevoNivel: string) => {
-    const especialidades = ESPECIALIDADES_POR_NIVEL[nuevoNivel] || ESPECIALIDADES_POR_NIVEL.INICIAL;
-    const primeraEspecialidad = especialidades[0] || 'INICIAL_GENERAL';
-
     onFilterChange({
       ...filters,
-      modalidad: currentModalidad,
+      modalidad: currentModalidad as ModalidadEducativa,
       nivel: nuevoNivel as NivelEducativo,
-      especialidad: primeraEspecialidad,
-      anio: currentAnio,
+      especialidad: '',
     });
   };
 
   const handleEspecialidadChange = (nuevaEspecialidad: string) => {
     onFilterChange({
       ...filters,
-      modalidad: currentModalidad,
+      modalidad: currentModalidad as ModalidadEducativa,
       nivel: currentNivel as NivelEducativo,
       especialidad: nuevaEspecialidad,
-      anio: currentAnio,
     });
   };
 
   const handleAnioChange = (nuevoAnioStr: string) => {
     onFilterChange({
       ...filters,
-      modalidad: currentModalidad,
+      modalidad: currentModalidad as ModalidadEducativa,
       nivel: currentNivel as NivelEducativo,
       especialidad: currentEspecialidad,
-      anio: Number(nuevoAnioStr),
+      anio: nuevoAnioStr ? Number(nuevoAnioStr) : ('' as any),
     });
   };
 
@@ -320,10 +300,13 @@ export const CascadingFilters: React.FC<CascadingFiltersProps> = ({
             Modalidad
           </label>
           <select
-            value={currentModalidad}
+            value={filters.modalidad && filters.modalidad !== 'TODOS' ? filters.modalidad : ''}
             onChange={(e) => handleModalidadChange(e.target.value)}
             className="w-full h-10 px-3 rounded-xl border border-gray-200 dark:border-slate-800 bg-gray-50/50 dark:bg-slate-800 text-gray-900 dark:text-white text-xs font-bold focus:outline-none transition-all cursor-pointer"
           >
+            <option value="" disabled hidden className="text-gray-400">
+              Selecciona tu modalidad
+            </option>
             {MODALIDADES.map((opt) => (
               <option key={opt.value} value={opt.value}>
                 {opt.label}
@@ -339,10 +322,13 @@ export const CascadingFilters: React.FC<CascadingFiltersProps> = ({
               Nivel
             </label>
             <select
-              value={currentNivel}
+              value={filters.nivel && filters.nivel !== 'TODOS' ? filters.nivel : ''}
               onChange={(e) => handleNivelChange(e.target.value)}
               className="w-full h-10 px-3 rounded-xl border border-gray-200 dark:border-slate-800 bg-gray-50/50 dark:bg-slate-800 text-gray-900 dark:text-white text-xs font-bold focus:outline-none transition-all cursor-pointer"
             >
+              <option value="" disabled hidden className="text-gray-400">
+                Selecciona tu nivel
+              </option>
               {nivelesDisponibles.map((opt) => (
                 <option key={opt.value} value={opt.value}>
                   {opt.label}
@@ -358,10 +344,13 @@ export const CascadingFilters: React.FC<CascadingFiltersProps> = ({
             {isDirectivos ? 'Cargo a Postular (MINEDU)' : 'Área o especialidad'}
           </label>
           <select
-            value={currentEspecialidad}
+            value={filters.especialidad && filters.especialidad !== 'TODOS' ? filters.especialidad : ''}
             onChange={(e) => handleEspecialidadChange(e.target.value)}
             className="w-full h-10 px-3 rounded-xl border border-gray-200 dark:border-slate-800 bg-gray-50/50 dark:bg-slate-800 text-gray-900 dark:text-white text-xs font-bold focus:outline-none transition-all cursor-pointer"
           >
+            <option value="" disabled hidden className="text-gray-400">
+              {isDirectivos ? 'Selecciona tu cargo' : 'Selecciona una especialidad'}
+            </option>
             {especialidadesDisponibles.map((opt) => (
               <option key={opt.value} value={opt.label || opt.value}>
                 {opt.label}
@@ -376,10 +365,13 @@ export const CascadingFilters: React.FC<CascadingFiltersProps> = ({
             Año
           </label>
           <select
-            value={String(currentAnio)}
+            value={filters.anio && filters.anio !== 'TODOS' ? String(filters.anio) : ''}
             onChange={(e) => handleAnioChange(e.target.value)}
             className="w-full h-10 px-3 rounded-xl border border-gray-200 dark:border-slate-800 bg-gray-50/50 dark:bg-slate-800 text-gray-900 dark:text-white text-xs font-bold focus:outline-none transition-all cursor-pointer"
           >
+            <option value="" disabled hidden className="text-gray-400">
+              Selecciona el año
+            </option>
             {ANIOS.map((opt) => (
               <option key={opt.value} value={opt.value}>
                 {opt.label}

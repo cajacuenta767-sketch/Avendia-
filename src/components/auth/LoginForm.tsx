@@ -11,7 +11,7 @@ export const LoginForm: React.FC = () => {
   const [step, setStep] = useState<1 | 2>(1);
   const [email, setEmail] = useState('');
   const [otpDigits, setOtpDigits] = useState<string[]>(['', '', '', '']);
-  const [timer, setTimer] = useState<number>(60);
+  const [timer, setTimer] = useState<number>(54);
   const [isTimerActive, setIsTimerActive] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string>('');
@@ -52,7 +52,7 @@ export const LoginForm: React.FC = () => {
 
     if (res.success) {
       setStep(2);
-      setTimer(60);
+      setTimer(54);
       setIsTimerActive(true);
       setSuccessMessage(res.data.message);
       setTimeout(() => inputRefs[0].current?.focus(), 150);
@@ -61,7 +61,6 @@ export const LoginForm: React.FC = () => {
     }
   };
 
-  // Manejo de entrada caracter a caracter
   const handleDigitChange = (index: number, value: string) => {
     if (!/^\d*$/.test(value)) return;
 
@@ -74,7 +73,6 @@ export const LoginForm: React.FC = () => {
     }
   };
 
-  // Soporte de COPIAR Y PEGAR directamente desde Gmail
   const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
     e.preventDefault();
     const pastedData = e.clipboardData.getData('text');
@@ -135,11 +133,11 @@ export const LoginForm: React.FC = () => {
   );
 
   return (
-    <div className="w-full bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 sm:p-8 shadow-xl shadow-blue-500/5 relative overflow-hidden space-y-5">
+    <div className="w-full bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800 p-6 sm:p-8 shadow-xl shadow-blue-500/5 space-y-5">
       {/* Insignia Superior */}
       <div className="flex items-center justify-between">
-        <span className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 text-[11px] font-extrabold uppercase tracking-wider border border-blue-100 dark:border-blue-900">
-          <svg className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <span className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-[#e0edff] dark:bg-blue-950 text-[#1d6bf3] dark:text-blue-300 text-[11px] font-extrabold uppercase tracking-wider border border-[#c7dcfd] dark:border-blue-900">
+          <svg className="w-3.5 h-3.5 text-[#1d6bf3]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
           </svg>
           <span>PORTAL DE ACCESO DOCENTE</span>
@@ -147,10 +145,10 @@ export const LoginForm: React.FC = () => {
       </div>
 
       <div className="space-y-1">
-        <h2 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">
+        <h2 className="text-2xl font-black text-[#0f172a] dark:text-white tracking-tight">
           Ingresa a tu cuenta
         </h2>
-        <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+        <p className="text-xs text-slate-500 dark:text-slate-400 font-medium leading-relaxed">
           Escribe correctamente tu correo electrónico que ya ha registrado en AVEND ESCALA.
         </p>
       </div>
@@ -176,18 +174,13 @@ export const LoginForm: React.FC = () => {
         <form onSubmit={handleSendOtp} className="space-y-4">
           <div className="space-y-1.5">
             <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                </svg>
-              </div>
               <input
                 type="email"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="avendocente@gmail.com"
-                className="w-full h-12 pl-10 pr-4 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 text-xs font-bold focus:ring-2 focus:ring-blue-600 focus:border-blue-600 outline-none transition-all"
+                className="w-full h-12 px-4 rounded-2xl border border-slate-200 dark:border-slate-700 bg-[#f8fafc] dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 text-xs font-bold focus:ring-2 focus:ring-blue-600 focus:bg-white outline-none transition-all"
               />
             </div>
           </div>
@@ -195,7 +188,7 @@ export const LoginForm: React.FC = () => {
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full h-12 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs tracking-wide shadow-md shadow-blue-600/20 transition-all flex items-center justify-center space-x-2 cursor-pointer"
+            className="w-full h-12 rounded-2xl bg-[#2563eb] hover:bg-[#1d4ed8] text-white font-extrabold text-xs tracking-wider uppercase shadow-md shadow-blue-600/20 transition-all flex items-center justify-center space-x-2 cursor-pointer"
           >
             {isLoading ? (
               <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -218,7 +211,7 @@ export const LoginForm: React.FC = () => {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full h-11 pl-9 pr-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-bold outline-none"
+                className="w-full h-11 pl-9 pr-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-[#f8fafc] dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-bold outline-none"
               />
             </div>
 
@@ -226,15 +219,15 @@ export const LoginForm: React.FC = () => {
               type="button"
               disabled={isTimerActive}
               onClick={() => handleSendOtp()}
-              className="h-11 px-3 rounded-xl bg-blue-100 dark:bg-blue-950 text-blue-600 dark:text-blue-300 text-[11px] font-extrabold disabled:opacity-60 whitespace-nowrap shrink-0 cursor-pointer"
+              className="h-11 px-3.5 rounded-xl bg-[#b9d5ff] dark:bg-blue-950 text-white dark:text-blue-200 text-xs font-bold disabled:opacity-80 whitespace-nowrap shrink-0 cursor-pointer"
             >
               {isTimerActive ? `Reenviar en ${timer}s` : 'Reenviar código'}
             </button>
           </div>
 
-          {/* Seccion de los 4 Casilleros de Código OTP con Soporte Paste */}
+          {/* Seccion de los 4 Casilleros de Código OTP */}
           <div className="space-y-2">
-            <label className="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider block">
+            <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider block">
               INGRESA EL CÓDIGO DE 4 DÍGITOS
             </label>
             <div className="flex items-center justify-between gap-3">
@@ -249,7 +242,7 @@ export const LoginForm: React.FC = () => {
                   onChange={(e) => handleDigitChange(idx, e.target.value)}
                   onPaste={handlePaste}
                   onKeyDown={(e) => handleKeyDown(idx, e)}
-                  className="w-14 h-14 text-center text-xl font-black rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-600 focus:border-blue-600 outline-none transition-all shadow-2xs"
+                  className="w-14 h-14 text-center text-xl font-black rounded-2xl border border-slate-300 dark:border-slate-700 bg-[#f8fafc] dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-600 focus:bg-white outline-none transition-all shadow-2xs"
                 />
               ))}
             </div>
@@ -259,7 +252,7 @@ export const LoginForm: React.FC = () => {
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full h-12 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs tracking-wide shadow-md shadow-blue-600/20 transition-all flex items-center justify-center space-x-2 cursor-pointer"
+            className="w-full h-12 rounded-2xl bg-[#0052cc] hover:bg-[#0043a8] text-white font-extrabold text-xs tracking-wide shadow-md transition-all flex items-center justify-center space-x-2 cursor-pointer"
           >
             {isLoading ? (
               <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -269,8 +262,8 @@ export const LoginForm: React.FC = () => {
           </button>
 
           {/* Nota Informativa con icono amarillo */}
-          <div className="flex items-start space-x-2 text-[11px] text-slate-500 dark:text-slate-400">
-            <span className="w-4 h-4 rounded-full bg-amber-400 text-slate-950 font-bold flex items-center justify-center shrink-0 mt-0.5 text-[10px]">
+          <div className="flex items-center space-x-2 text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+            <span className="w-4 h-4 rounded-full bg-amber-400 text-white font-black flex items-center justify-center shrink-0 text-[10px]">
               ?
             </span>
             <span className="leading-tight">
@@ -280,7 +273,7 @@ export const LoginForm: React.FC = () => {
 
           {/* Enlace de Reenvío de código */}
           {isTimerActive && (
-            <div className="text-center pt-1">
+            <div className="text-center pt-0.5">
               <span className="text-[11px] font-medium text-slate-400">
                 Reenviar código en {timer}s
               </span>
@@ -289,15 +282,21 @@ export const LoginForm: React.FC = () => {
         </form>
       )}
 
-      <div className="h-px bg-slate-100 dark:bg-slate-800 my-2" />
+      {/* Divisor con punto central exacto */}
+      <div className="relative flex items-center justify-center my-3">
+        <div className="w-full border-t border-slate-200/80 dark:border-slate-800" />
+        <span className="absolute bg-white dark:bg-slate-900 px-2 text-[10px] font-bold text-slate-400">
+          o
+        </span>
+      </div>
 
       {/* Botón Verde CTA: SOLICITAR ACCESO POR WHATSAPP */}
-      <div className="space-y-2">
+      <div className="space-y-2.5">
         <a
           href={whatsappUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="w-full h-12 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs tracking-wide shadow-md shadow-emerald-600/20 transition-all flex items-center justify-center space-x-2 cursor-pointer"
+          className="w-full h-12 rounded-2xl bg-[#00a651] hover:bg-[#008744] text-white font-extrabold text-xs tracking-wider uppercase shadow-md shadow-emerald-600/20 transition-all flex items-center justify-center space-x-2 cursor-pointer"
         >
           <svg className="w-5 h-5 text-white shrink-0" fill="currentColor" viewBox="0 0 24 24">
             <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-1.099 4.019 4.142-1.086z" />
@@ -306,7 +305,7 @@ export const LoginForm: React.FC = () => {
         </a>
 
         {/* Subtexto Informativo Inferior */}
-        <p className="text-[10px] text-center text-slate-400 italic leading-snug">
+        <p className="text-[10px] text-center text-slate-400 italic leading-snug font-serif">
           El acceso es gratuito para los docentes suscritos en la plataforma AVEND ESCALA desde julio del 2026.
         </p>
       </div>

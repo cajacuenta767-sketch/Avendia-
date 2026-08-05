@@ -58,10 +58,10 @@ function AdminContent() {
   }
 
   return (
-    <div className="h-screen flex flex-col lg:flex-row bg-gray-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 overflow-hidden">
+    <div className="min-h-screen flex flex-col lg:flex-row bg-gray-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 overflow-x-hidden">
       <AdminSidebar activeTab={activeTab} onTabChange={handleTabChange} onLogout={handleLogout} />
 
-      <main className="flex-1 p-6 sm:p-10 overflow-y-auto h-screen">
+      <main className="flex-1 p-3 sm:p-6 lg:p-10 overflow-y-auto w-full min-h-[calc(100vh-53px)] lg:h-screen">
         {activeTab === 'inicio' && <InicioView onNavigateTab={handleTabChange} />}
         {activeTab === 'usuarios' && <UsuariosView />}
         {activeTab === 'cuadernillos' && <BancoCuadernillosView />}

@@ -59,62 +59,79 @@ function saveBase64ToFile(base64Data: string, subfolder: string, prefix: string)
   }
 }
 
+let recursosCache: { timestamp: number; data: Recurso[] } | null = null;
+const RECURSOS_CACHE_TTL = 60000;
+
+export async function invalidateRecursosCache() {
+  recursosCache = null;
+}
+
 export async function getRecursosAction(
   searchQuery: string = '',
   categoria: CategoriaRecurso | 'TODOS' = 'TODOS'
 ): Promise<ActionResponse<Recurso[]>> {
   try {
-    if (prisma && (prisma as any).recurso) {
-      try {
-        let dbRecursos = await (prisma as any).recurso.findMany({
-          orderBy: { createdAt: 'asc' },
-        });
+    const now = Date.now();
+    let allRecursos: Recurso[];
 
-        if (!dbRecursos || dbRecursos.length === 0) {
-          console.log('🌱 [DISK AUTO-SEED] Sembrando tarjetas iniciales en PostgreSQL...');
-          for (const item of INITIAL_SEED_RECURSOS) {
-            await (prisma as any).recurso.create({ data: item });
-          }
-
+    if (recursosCache && (now - recursosCache.timestamp < RECURSOS_CACHE_TTL)) {
+      allRecursos = recursosCache.data;
+    } else {
+      let dbRecursos: any[] = [];
+      if (prisma && (prisma as any).recurso) {
+        try {
           dbRecursos = await (prisma as any).recurso.findMany({
+            take: 100,
+            select: {
+              id: true,
+              titulo: true,
+              descripcion: true,
+              categoria: true,
+              urlPdf: true,
+              urlImagen: true,
+              estado: true,
+              colorHeader: true,
+              createdAt: true,
+            },
             orderBy: { createdAt: 'asc' },
           });
+        } catch (err) {
+          console.error('❌ [DISK DB READ ERROR]:', err);
         }
-
-        const formatted: Recurso[] = dbRecursos.map((item: any, idx: number) => ({
-          id: item.id,
-          numero: idx + 1,
-          titulo: item.titulo,
-          descripcion: item.descripcion || 'Ficha de estudio para evaluaciones docentes.',
-          categoria: (item.categoria as CategoriaRecurso) || 'CASUISTICA_PEDAGOGICA',
-          categoriaLabel: (item.categoria || 'CASUISTICA_PEDAGOGICA').replace('_', ' '),
-          colorTheme: (item.colorHeader as any) || 'blue',
-          paginas: 2,
-          formato: 'PDF',
-          urlPdf: item.urlPdf || item.r2PdfKey || DEFAULT_SAMPLE_PDF,
-          urlImagen: item.urlImagen || item.r2ImageKey || undefined,
-          tags: ['MINEDU'],
-          status: item.estado as 'PUBLICADO' | 'OCULTO',
-        }));
-
-        return { success: true, data: formatted };
-      } catch (err) {
-        console.error('❌ [DISK DB READ ERROR]:', err);
       }
+
+      allRecursos = dbRecursos.map((item: any, idx: number) => ({
+        id: item.id,
+        numero: idx + 1,
+        titulo: item.titulo,
+        descripcion: item.descripcion || 'Ficha de estudio para evaluaciones docentes.',
+        categoria: (item.categoria as CategoriaRecurso) || 'CASUISTICA_PEDAGOGICA',
+        categoriaLabel: (item.categoria || 'CASUISTICA_PEDAGOGICA').replace('_', ' '),
+        colorTheme: (item.colorHeader as any) || 'blue',
+        paginas: 2,
+        formato: 'PDF',
+        urlPdf: item.urlPdf || item.r2PdfKey || DEFAULT_SAMPLE_PDF,
+        urlImagen: item.urlImagen || item.r2ImageKey || undefined,
+        tags: ['MINEDU'],
+        status: item.estado as 'PUBLICADO' | 'OCULTO',
+      }));
+
+      recursosCache = { timestamp: now, data: allRecursos };
     }
 
-    let result = [...MOCK_RECURSOS];
+    let filtered = allRecursos;
     if (categoria !== 'TODOS') {
-      result = result.filter((item) => item.categoria === categoria);
+      filtered = filtered.filter((item) => item.categoria === categoria);
     }
     if (searchQuery.trim() !== '') {
-      const query = searchQuery.toLowerCase();
-      result = result.filter((item) => item.titulo.toLowerCase().includes(query));
+      const q = searchQuery.toLowerCase();
+      filtered = filtered.filter((item) => item.titulo.toLowerCase().includes(q));
     }
-    return { success: true, data: result };
+
+    return { success: true, data: filtered };
   } catch (error) {
     console.error('❌ [GET RECURSOS ERROR]:', error);
-    return { success: true, data: MOCK_RECURSOS };
+    return { success: true, data: [] };
   }
 }
 
@@ -144,7 +161,9 @@ export async function createRecursoAction(data: {
           },
         });
 
+        invalidateRecursosCache();
         revalidatePath('/admin');
+        revalidatePath('/recursos');
 
         const newRecurso: Recurso = {
           id: created.id,
@@ -226,13 +245,16 @@ export async function updateRecursoAction(
           data: updatePayload,
         });
 
+        invalidateRecursosCache();
         revalidatePath('/admin');
+        revalidatePath('/recursos');
         return { success: true, data: { id: updated.id, urlImagen: updated.urlImagen, urlPdf: updated.urlPdf } };
       } catch (err) {
         console.error('❌ [DISK DB UPDATE ERROR]:', err);
       }
     }
 
+    invalidateRecursosCache();
     const target = MOCK_RECURSOS.find((r) => r.id === id);
     if (target) {
       if (updatePayload.titulo !== undefined) target.titulo = updatePayload.titulo;
@@ -264,7 +286,9 @@ export async function deleteRecursoAction(id: string): Promise<ActionResponse<{ 
     if (prisma && (prisma as any).recurso) {
       try {
         await (prisma as any).recurso.delete({ where: { id } });
+        invalidateRecursosCache();
         revalidatePath('/admin');
+        revalidatePath('/recursos');
       } catch (err) {
         console.error('❌ [DISK DB DELETE ERROR]:', err);
       }

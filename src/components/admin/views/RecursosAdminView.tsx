@@ -385,15 +385,15 @@ export const RecursosAdminView: React.FC = () => {
               </label>
             </div>
 
-            {/* Botones Inferiores */}
-            <div className="flex items-center space-x-2 pt-1">
+            {/* Botones Inferiores Adaptados para Todos los Tamaños (320px - 4K) */}
+            <div className="grid grid-cols-3 gap-1.5 pt-1">
               <button
                 type="button"
                 onClick={() => handleToggleOcultar(rec.id, rec.estado)}
-                className={`font-bold text-[11px] rounded-xl py-2 px-3 flex-1 text-center transition-colors ${
+                className={`font-bold text-[10px] sm:text-xs rounded-xl py-2 px-1 text-center transition-colors truncate ${
                   rec.estado === 'PUBLICADO'
-                    ? 'bg-purple-50 text-indigo-700 hover:bg-purple-100'
-                    : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                    ? 'bg-purple-50 text-indigo-700 hover:bg-purple-100 dark:bg-purple-950/60 dark:text-purple-300'
+                    : 'bg-gray-100 text-gray-500 hover:bg-gray-200 dark:bg-slate-800 dark:text-slate-400'
                 }`}
               >
                 {rec.estado === 'PUBLICADO' ? 'OCULTAR' : 'MOSTRAR'}
@@ -402,7 +402,7 @@ export const RecursosAdminView: React.FC = () => {
               <button
                 type="button"
                 onClick={() => handlePrevisualizar(rec)}
-                className="bg-purple-50 text-indigo-700 font-bold text-[11px] rounded-xl py-2 px-3 flex-1 text-center hover:bg-purple-100 transition-colors"
+                className="bg-purple-50 text-indigo-700 dark:bg-purple-950/60 dark:text-purple-300 font-bold text-[10px] sm:text-xs rounded-xl py-2 px-1 text-center hover:bg-purple-100 transition-colors truncate"
               >
                 PREVISUALIZAR
               </button>
@@ -410,7 +410,7 @@ export const RecursosAdminView: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setDeleteModal({ isOpen: true, id: rec.id, title: rec.title })}
-                className="bg-rose-50 text-rose-600 font-bold text-[11px] rounded-xl py-2 px-3 text-center hover:bg-rose-100 transition-colors"
+                className="bg-rose-50 text-rose-600 dark:bg-rose-950/60 dark:text-rose-300 font-bold text-[10px] sm:text-xs rounded-xl py-2 px-1 text-center hover:bg-rose-100 transition-colors truncate"
               >
                 ELIMINAR
               </button>

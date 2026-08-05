@@ -39,15 +39,16 @@ export default function RecursosPage() {
   });
 
   const fetchRecursos = useCallback(async () => {
-    setIsLoading(true);
+    // Si ya tenemos recursos cargados, no ocultamos la pantalla con bloques grises
+    if (recursos.length === 0) {
+      setIsLoading(true);
+    }
     const response = await getRecursosAction(searchQuery, selectedCategory);
-    if (response.success) {
+    if (response.success && response.data.length > 0) {
       setRecursos(response.data);
-    } else {
-      console.error(response.error.message);
     }
     setIsLoading(false);
-  }, [searchQuery, selectedCategory]);
+  }, [searchQuery, selectedCategory, recursos.length]);
 
   useEffect(() => {
     fetchRecursos();

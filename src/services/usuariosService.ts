@@ -45,9 +45,22 @@ function formatDateTimePE(dateObj: Date): string {
   }
 }
 
+let usuariosCache: { timestamp: number; data: UsuarioDocenteItem[] } | null = null;
+const USUARIOS_CACHE_TTL = 60000;
+
+export async function invalidateUsuariosCache() {
+  usuariosCache = null;
+}
+
 export async function getUsuariosAction(): Promise<ActionResponse<UsuarioDocenteItem[]>> {
   try {
+    const now = Date.now();
+    if (usuariosCache && (now - usuariosCache.timestamp < USUARIOS_CACHE_TTL)) {
+      return { success: true, data: usuariosCache.data };
+    }
+
     const dbUsers = await prisma.usuarioDocente.findMany({
+      take: 100,
       orderBy: { createdAt: 'desc' },
     });
 
@@ -78,6 +91,7 @@ export async function getUsuariosAction(): Promise<ActionResponse<UsuarioDocente
       };
     });
 
+    usuariosCache = { timestamp: now, data: formatted };
     return { success: true, data: formatted };
   } catch (error: any) {
     console.error('❌ ERROR REAL CRITICO:', error);
@@ -140,6 +154,7 @@ export async function createUsuarioAction(data: {
       },
     });
 
+    invalidateUsuariosCache();
     revalidatePath('/admin');
     return {
       success: true,
