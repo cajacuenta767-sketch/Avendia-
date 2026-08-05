@@ -73,6 +73,13 @@ export const Navbar: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  const handleNavClick = (e: React.MouseEvent, targetPath: string) => {
+    if (!docenteSession) {
+      e.preventDefault();
+      setIsAuthModalOpen(true);
+    }
+  };
+
   const handleLogout = () => {
     localStorage.removeItem('docente_session');
     setDocenteSession(null);
@@ -94,10 +101,11 @@ export const Navbar: React.FC = () => {
         {/* Logo oficial */}
         <Logo />
 
-        {/* Navegación Desktop Libre Sin Modales Interrumpiendo */}
+        {/* Navegación Desktop Restringida sin credenciales */}
         <nav className="hidden md:flex items-center space-x-2">
           <Link
             href="/cuadernillos"
+            onClick={(e) => handleNavClick(e, '/cuadernillos')}
             className="px-3.5 py-2 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center space-x-2 cursor-pointer"
           >
             <svg className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -108,6 +116,7 @@ export const Navbar: React.FC = () => {
 
           <Link
             href="/recursos"
+            onClick={(e) => handleNavClick(e, '/recursos')}
             className="px-3.5 py-2 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center space-x-2 cursor-pointer"
           >
             <svg className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">

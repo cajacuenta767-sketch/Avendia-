@@ -2,6 +2,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { ResourceSearch } from '@/components/recursos/ResourceSearch';
 import { ResourceCard } from '@/components/recursos/ResourceCard';
 import { PdfViewerModal } from '@/components/cuadernillos/PdfViewerModal';
@@ -11,10 +12,19 @@ import { CategoriaRecurso, Recurso } from '@/types/recurso';
 import { Evaluacion } from '@/types/evaluacion';
 
 export default function RecursosPage() {
+  const router = useRouter();
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedCategory, setSelectedCategory] = useState<CategoriaRecurso | 'TODOS'>('TODOS');
   const [recursos, setRecursos] = useState<Recurso[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+
+  // Guard de Navegación Estricta
+  useEffect(() => {
+    const sessionStr = localStorage.getItem('docente_session');
+    if (!sessionStr) {
+      router.replace('/');
+    }
+  }, [router]);
 
   // Modal de Auth
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);

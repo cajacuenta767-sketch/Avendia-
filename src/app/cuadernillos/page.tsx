@@ -122,12 +122,17 @@ function CuadernillosContent() {
   useEffect(() => {
     const checkSession = () => {
       const sessionStr = localStorage.getItem('docente_session');
-      setHasDocenteSession(Boolean(sessionStr));
+      if (!sessionStr) {
+        router.replace('/');
+        setHasDocenteSession(false);
+      } else {
+        setHasDocenteSession(true);
+      }
     };
     checkSession();
     window.addEventListener('docente_session_change', checkSession);
     return () => window.removeEventListener('docente_session_change', checkSession);
-  }, []);
+  }, [router]);
 
   // Modal de Auth
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
