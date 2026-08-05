@@ -247,11 +247,11 @@ function CuadernillosContent() {
 
         if (session.areas && Array.isArray(session.areas) && session.areas.length > 0) {
           const userAreas = session.areas.map((a: string) => a.toLowerCase().trim());
-          const evalArea = (evalTarget.area || '').toLowerCase().trim();
+          const evalArea = ((evalTarget as any).area || evalTarget.especialidad || '').toLowerCase().trim();
 
           const hasAreaAccess = userAreas.some((ua: string) => evalArea.includes(ua) || ua.includes(evalArea));
           if (!hasAreaAccess) {
-            alert(`🔒 ACCESO RESTRINGIDO POR ESPECIALIDAD\n\nTu suscripción Premium no incluye el área "${evalTarget.area}".\n\nEspecialidades habilitadas en tu cuenta: ${session.areas.join(', ')}.`);
+            alert(`🔒 ACCESO RESTRINGIDO POR ESPECIALIDAD\n\nTu suscripción Premium no incluye el área "${evalTarget.especialidad}".\n\nEspecialidades habilitadas en tu cuenta: ${session.areas.join(', ')}.`);
             return;
           }
         }

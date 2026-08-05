@@ -11,6 +11,12 @@ export interface UserFormData {
   areas: string[];
 }
 
+export interface UserFormModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSubmit: (data: UserFormData) => void;
+}
+
 const MODALIDADES = [
   { value: 'EBR', label: 'EBR' },
   { value: 'EBA', label: 'EBA' },

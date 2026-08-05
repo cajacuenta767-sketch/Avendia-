@@ -509,6 +509,7 @@ export async function loginDocenteAction(
 export async function registrarseDocenteAction(data: {
   nombre: string;
   email: string;
+  pin?: string;
   modalidad?: string;
   nivel?: string;
   areas?: string[];

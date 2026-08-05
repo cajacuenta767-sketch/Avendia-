@@ -108,7 +108,7 @@ export const EvaluationFormModal: React.FC<EvaluationFormModalProps> = ({
         nivel,
         especialidad,
         anio: Number(anio),
-        cuadernilloKey,
+        cuadernilloKey: cuadernilloKey || '',
         resolucionKey,
         clavesKey,
         origenCuadernillo,

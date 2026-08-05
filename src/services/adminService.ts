@@ -173,6 +173,9 @@ export interface CreateEvaluationInput {
   cuadernilloKey: string;
   resolucionKey?: string;
   clavesKey?: string;
+  origenCuadernillo?: string;
+  origenResolucion?: string;
+  origenClaves?: string;
 }
 
 /**
