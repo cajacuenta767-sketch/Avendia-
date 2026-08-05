@@ -17,98 +17,13 @@ interface CascadingFiltersProps {
   activeProceso?: ProcesoMinedu;
 }
 
-const MODALIDADES: { value: ModalidadEducativa; label: string }[] = [
-  { value: 'EBR', label: 'EBR' },
-  { value: 'EBA', label: 'EBA' },
-  { value: 'EBE', label: 'EBE' },
-  { value: 'CETPRO', label: 'CETPRO' },
-];
-
-const NIVELES_MAESTROS = [
-  { value: 'INICIAL', label: 'Inicial' },
-  { value: 'PRIMARIA', label: 'Primaria' },
-  { value: 'SECUNDARIA', label: 'Secundaria' },
-  { value: 'EBA_INICIAL_INTERMEDIO', label: 'Ciclo Inicial e Intermedio (EBA)' },
-  { value: 'EBA_AVANZADO', label: 'Ciclo Avanzado (EBA)' },
-  { value: 'CETPRO_TECNICO', label: 'Ciclo Técnico Productivo (CETPRO)' },
-];
-
-const NIVELES_POR_MODALIDAD: Record<ModalidadEducativa, string[]> = {
-  EBR: ['INICIAL', 'PRIMARIA', 'SECUNDARIA'],
-  EBA: ['EBA_INICIAL_INTERMEDIO', 'EBA_AVANZADO'],
-  EBE: ['INICIAL', 'PRIMARIA'],
-  CETPRO: ['CETPRO_TECNICO'],
-};
-
-const ESPECIALIDADES_MAESTRAS = [
-  { value: 'INICIAL_GENERAL', label: 'Educación Inicial' },
-  { value: 'PRIMARIA_GENERAL', label: 'Educación Primaria' },
-  { value: 'INNOVACION_PEDAGOGICA', label: 'AIP / Aula de Innovación Pedagógica' },
-  { value: 'EBE_GENERAL', label: 'Educación Básica Especial' },
-  { value: 'MATEMATICA', label: 'Matemática' },
-  { value: 'COMUNICACION', label: 'Comunicación' },
-  { value: 'INGLES', label: 'Inglés (Idioma Extranjero)' },
-  { value: 'CIENCIA_Y_TECNOLOGIA', label: 'Ciencia y Tecnología' },
-  { value: 'CIENCIAS_SOCIALES', label: 'Ciencias Sociales' },
-  { value: 'DESARROLLO_PERSONAL_CIUDADANO', label: 'Desarrollo Personal, Ciudadanía y Cívica (DPCC)' },
-  { value: 'EDUCACION_FISICA', label: 'Educación Física' },
-  { value: 'EDUCACION_POR_EL_TRABAJO', label: 'Educación para el Trabajo (EPT)' },
-  { value: 'ARTE_Y_CULTURA', label: 'Arte y Cultura' },
-  { value: 'EDUCACION_RELIGIOSA', label: 'Educación Religiosa' },
-  { value: 'EBA_CIENCIA_AMBIENTE_SALUD', label: 'Ciencia, Ambiente y Salud' },
-  { value: 'EBA_PARA_EL_TRABAJO', label: 'Para el Trabajo' },
-  { value: 'EBA_DESARROLLO_PERSONAL', label: 'Desarrollo Personal y Ciudadano' },
-  { value: 'CETPRO_FORMACION_LABORAL', label: 'Técnico Productivo / Formación Laboral' },
-
-  // LISTA OFICIAL COMPLETA DE CARGOS DIRECTIVOS Y ESPECIALISTAS MINEDU
-  { value: 'ACCESO_DIRECTIVOS', label: 'Acceso a cargos directivos' },
-  { value: 'DIRECTOR_IE', label: 'Director de Institución Educativa' },
-  { value: 'SUBDIRECTOR_IE', label: 'Subdirector de Institución Educativa' },
-  { value: 'ESPECIALISTA_UGEL', label: 'Especialista en Educación de UGEL' },
-  { value: 'ESPECIALISTA_DRE', label: 'Especialista en Educación de DRE' },
-  { value: 'DGP_DRE', label: 'Director de Gestión Pedagógica (DGP) de DRE' },
-  { value: 'JAGP_UGEL', label: 'Jefe de Gestión Pedagógica (JAGP) de UGEL' },
-  { value: 'DIRECTOR_UGEL', label: 'Director de UGEL' },
-];
-
-const ESPECIALIDADES_DIRECTIVOS_LIST = [
-  { value: 'ACCESO_DIRECTIVOS', label: 'Acceso a cargos directivos' },
-  { value: 'DIRECTOR_IE', label: 'Director de Institución Educativa' },
-  { value: 'SUBDIRECTOR_IE', label: 'Subdirector de Institución Educativa' },
-  { value: 'ESPECIALISTA_UGEL', label: 'Especialista en Educación de UGEL' },
-  { value: 'ESPECIALISTA_DRE', label: 'Especialista en Educación de DRE' },
-  { value: 'DGP_DRE', label: 'Director de Gestión Pedagógica (DGP) de DRE' },
-  { value: 'JAGP_UGEL', label: 'Jefe de Gestión Pedagógica (JAGP) de UGEL' },
-  { value: 'DIRECTOR_UGEL', label: 'Director de UGEL' },
-];
-
-const ESPECIALIDADES_POR_NIVEL: Record<string, string[]> = {
-  INICIAL: ['INICIAL_GENERAL'],
-  PRIMARIA: ['PRIMARIA_GENERAL', 'EDUCACION_FISICA', 'INNOVACION_PEDAGOGICA'],
-  SECUNDARIA: [
-    'MATEMATICA',
-    'COMUNICACION',
-    'INGLES',
-    'CIENCIA_Y_TECNOLOGIA',
-    'CIENCIAS_SOCIALES',
-    'DESARROLLO_PERSONAL_CIUDADANO',
-    'EDUCACION_FISICA',
-    'EDUCACION_POR_EL_TRABAJO',
-    'ARTE_Y_CULTURA',
-    'EDUCACION_RELIGIOSA',
-    'INNOVACION_PEDAGOGICA',
-  ],
-  EBA_INICIAL_INTERMEDIO: ['PRIMARIA_GENERAL', 'COMUNICACION', 'MATEMATICA'],
-  EBA_AVANZADO: [
-    'COMUNICACION',
-    'MATEMATICA',
-    'EBA_CIENCIA_AMBIENTE_SALUD',
-    'EBA_PARA_EL_TRABAJO',
-    'EBA_DESARROLLO_PERSONAL',
-    'INGLES',
-  ],
-  CETPRO_TECNICO: ['CETPRO_FORMACION_LABORAL', 'EDUCACION_POR_EL_TRABAJO'],
-};
+import {
+  MODALIDADES_LIST,
+  NIVELES_POR_MODALIDAD,
+  AREAS_POR_MODALIDAD_NIVEL,
+  ESPECIALIDADES_DIRECTIVOS_LIST,
+  ModalidadKey,
+} from '@/data/cascadingData';
 
 const ANIOS = [
   { value: '2024', label: 'Todos los años' },
@@ -179,9 +94,8 @@ export const CascadingFilters: React.FC<CascadingFiltersProps> = ({
 
   const nivelesDisponibles = useMemo(() => {
     if (isDirectivos) return [];
-    const targetModalidad = (currentModalidad as ModalidadEducativa) || 'EBR';
-    const permitidos = NIVELES_POR_MODALIDAD[targetModalidad] || NIVELES_POR_MODALIDAD.EBR;
-    return NIVELES_MAESTROS.filter((n) => permitidos.includes(n.value));
+    const targetModalidad = (currentModalidad as ModalidadKey) || 'EBR';
+    return NIVELES_POR_MODALIDAD[targetModalidad] || NIVELES_POR_MODALIDAD.EBR;
   }, [currentModalidad, isDirectivos]);
 
   const currentNivel = useMemo(() => {
@@ -194,10 +108,12 @@ export const CascadingFilters: React.FC<CascadingFiltersProps> = ({
 
   const especialidadesDisponibles = useMemo(() => {
     if (isDirectivos) return ESPECIALIDADES_DIRECTIVOS_LIST;
-    const targetNivel = currentNivel || 'INICIAL';
-    const permitidos = ESPECIALIDADES_POR_NIVEL[targetNivel] || ESPECIALIDADES_POR_NIVEL.INICIAL;
-    return ESPECIALIDADES_MAESTRAS.filter((e) => permitidos.includes(e.value));
-  }, [currentNivel, isDirectivos]);
+    if (!currentModalidad || !currentNivel) return [];
+    const modKey = currentModalidad as ModalidadKey;
+    const areasObj = AREAS_POR_MODALIDAD_NIVEL[modKey];
+    if (!areasObj) return [];
+    return areasObj[currentNivel] || [];
+  }, [currentModalidad, currentNivel, isDirectivos]);
 
   const currentEspecialidad = useMemo(() => {
     if (isDirectivos) {
@@ -260,7 +176,7 @@ export const CascadingFilters: React.FC<CascadingFiltersProps> = ({
     ? 'Directivos'
     : 'Nombramiento';
 
-  const nivelTextoLabel = NIVELES_MAESTROS.find((n) => n.value === currentNivel)?.label;
+  const nivelTextoLabel = nivelesDisponibles.find((n) => n.value === currentNivel)?.label;
 
   return (
     <section className="w-full space-y-3 bg-white dark:bg-slate-900 p-5 rounded-2xl border border-gray-200/80 dark:border-slate-800 shadow-2xs">
@@ -307,7 +223,7 @@ export const CascadingFilters: React.FC<CascadingFiltersProps> = ({
             <option value="" disabled hidden className="text-gray-400">
               Selecciona tu modalidad
             </option>
-            {MODALIDADES.map((opt) => (
+            {MODALIDADES_LIST.map((opt) => (
               <option key={opt.value} value={opt.value}>
                 {opt.label}
               </option>
@@ -344,18 +260,32 @@ export const CascadingFilters: React.FC<CascadingFiltersProps> = ({
             {isDirectivos ? 'Cargo a Postular (MINEDU)' : 'Área o especialidad'}
           </label>
           <select
-            value={filters.especialidad && filters.especialidad !== 'TODOS' ? filters.especialidad : ''}
+            value={
+              !isDirectivos && currentNivel && especialidadesDisponibles.length === 0
+                ? '—'
+                : filters.especialidad && filters.especialidad !== 'TODOS'
+                ? filters.especialidad
+                : ''
+            }
             onChange={(e) => handleEspecialidadChange(e.target.value)}
-            className="w-full h-10 px-3 rounded-xl border border-gray-200 dark:border-slate-800 bg-gray-50/50 dark:bg-slate-800 text-gray-900 dark:text-white text-xs font-bold focus:outline-none transition-all cursor-pointer"
+            disabled={!isDirectivos && !!currentNivel && especialidadesDisponibles.length === 0}
+            className="w-full h-10 px-3 rounded-xl border border-gray-200 dark:border-slate-800 bg-gray-50/50 dark:bg-slate-800 text-gray-900 dark:text-white text-xs font-bold focus:outline-none transition-all cursor-pointer disabled:opacity-80 disabled:cursor-not-allowed"
           >
             <option value="" disabled hidden className="text-gray-400">
               {isDirectivos ? 'Selecciona tu cargo' : 'Selecciona una especialidad'}
             </option>
-            {especialidadesDisponibles.map((opt) => (
-              <option key={opt.value} value={opt.label || opt.value}>
-                {opt.label}
-              </option>
-            ))}
+            {!isDirectivos && currentNivel && especialidadesDisponibles.length === 0 ? (
+              <option value="—">—</option>
+            ) : (
+              especialidadesDisponibles.map((opt) => {
+                const itemVal = typeof opt === 'string' ? opt : (opt as any).label || (opt as any).value;
+                return (
+                  <option key={itemVal} value={itemVal}>
+                    {itemVal}
+                  </option>
+                );
+              })
+            )}
           </select>
         </div>
 

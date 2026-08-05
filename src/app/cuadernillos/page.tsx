@@ -168,16 +168,12 @@ function CuadernillosContent() {
   }, [pathname, router]);
 
   const fetchEvaluaciones = useCallback(async () => {
-    // Si ya existen cuadernillos cargados, no se muestran bloques grises al cambiar filtros
-    if (evaluaciones.length === 0) {
-      setIsLoading(true);
-    }
     const response = await getEvaluacionesAction(filters);
-    if (response.success && response.data.length > 0) {
+    if (response.success) {
       setEvaluaciones(response.data);
     }
     setIsLoading(false);
-  }, [filters, evaluaciones.length]);
+  }, [filters]);
 
   useEffect(() => {
     fetchEvaluaciones();

@@ -10,6 +10,13 @@ import {
   deleteEvaluacionAction,
 } from '@/services/evaluacionesService';
 import { ProcesoMinedu, ModalidadEducativa, NivelEducativo, Evaluacion } from '@/types/evaluacion';
+import {
+  MODALIDADES_LIST,
+  NIVELES_POR_MODALIDAD as NIVELES_POR_MODALIDAD_DATA,
+  AREAS_POR_MODALIDAD_NIVEL,
+  ESPECIALIDADES_DIRECTIVOS_LIST,
+  ModalidadKey,
+} from '@/data/cascadingData';
 
 interface DocumentState {
   file: File | null;
@@ -23,60 +30,12 @@ interface PdfDocItem {
   url: string;
 }
 
-// Mapas de jerarquía y especialidades oficiales MINEDU Perú
-const NIVELES_POR_MODALIDAD: Record<ModalidadEducativa, { value: NivelEducativo; label: string }[]> = {
-  EBR: [
-    { value: 'INICIAL', label: 'Inicial' },
-    { value: 'PRIMARIA', label: 'Primaria' },
-    { value: 'SECUNDARIA', label: 'Secundaria' },
-  ],
-  EBA: [
-    { value: 'INICIAL', label: 'Ciclo Inicial e Intermedio' },
-    { value: 'SECUNDARIA', label: 'Ciclo Avanzado' },
-  ],
-  EBE: [
-    { value: 'INICIAL', label: 'Inicial EBE' },
-    { value: 'PRIMARIA', label: 'Primaria EBE' },
-  ],
-  CETPRO: [
-    { value: 'SECUNDARIA', label: 'Ciclo Técnico Productivo' },
-  ],
-};
-
-const AREAS_POR_NIVEL: Record<string, string[]> = {
-  INICIAL: ['Educación Inicial', 'AIP / Aula de Innovación Pedagógica'],
-  PRIMARIA: ['Educación Primaria', 'Educación Física', 'AIP / Aula de Innovación Pedagógica'],
-  SECUNDARIA: [
-    'Matemática',
-    'Comunicación',
-    'Ciencia y Tecnología',
-    'Ciencias Sociales',
-    'Desarrollo Personal, Ciudadanía y Cívica (DPCC)',
-    'Educación Física',
-    'Inglés',
-    'Educación para el Trabajo (EPT)',
-    'Arte y Cultura',
-    'Educación Religiosa',
-    'AIP / Aula de Innovación Pedagógica',
-  ],
-  NO_APLICA: [
-    'Acceso a cargos directivos',
-    'Director de Institución Educativa',
-    'Subdirector de Institución Educativa',
-    'Especialista en Educación de UGEL',
-    'Especialista en Educación de DRE',
-    'Director de Gestión Pedagógica (DGP) de DRE',
-    'Jefe de Gestión Pedagógica (JAGP) de UGEL',
-    'Director de UGEL',
-  ],
-};
-
 export const BancoCuadernillosView: React.FC = () => {
   // 1. Clasificación Pedagógica con Jerarquía en Cascada
   const [proceso, setProceso] = useState<ProcesoMinedu>('NOMBRAMIENTO_DOCENTE');
   const [modalidad, setModalidad] = useState<ModalidadEducativa>('EBR');
   const [nivel, setNivel] = useState<NivelEducativo>('INICIAL');
-  const [area, setArea] = useState<string>('Educación Inicial');
+  const [area, setArea] = useState<string>('');
 
   // Gestión de Años desde PostgreSQL Local
   const [listaAnios, setListaAnios] = useState<string[]>(['2024', '2023', '2022', '2021', '2019', '2018', '2014']);
@@ -158,43 +117,51 @@ export const BancoCuadernillosView: React.FC = () => {
     if (proceso === 'ACCESO_CARGOS_DIRECTIVOS') {
       return [{ value: 'NO_APLICA' as NivelEducativo, label: 'Sin Nivel Específico (Cargos de Gestión)' }];
     }
-    return NIVELES_POR_MODALIDAD[modalidad] || NIVELES_POR_MODALIDAD.EBR;
+    const modKey = modalidad as ModalidadKey;
+    const list = NIVELES_POR_MODALIDAD_DATA[modKey] || NIVELES_POR_MODALIDAD_DATA.EBR;
+    return list.map((item) => ({ value: item.value as NivelEducativo, label: item.label }));
   }, [proceso, modalidad]);
 
-  // Áreas/Especialidades disponibles según el Nivel activo
+  // Áreas/Especialidades disponibles según la Modalidad y Nivel activos
   const areasDisponibles = useMemo(() => {
     if (proceso === 'ACCESO_CARGOS_DIRECTIVOS' || nivel === 'NO_APLICA') {
-      return AREAS_POR_NIVEL.NO_APLICA;
+      return ESPECIALIDADES_DIRECTIVOS_LIST;
     }
-    return AREAS_POR_NIVEL[nivel] || AREAS_POR_NIVEL.INICIAL;
-  }, [proceso, nivel]);
+    const modKey = modalidad as ModalidadKey;
+    const areasObj = AREAS_POR_MODALIDAD_NIVEL[modKey];
+    if (!areasObj) return [];
+    return areasObj[nivel] || [];
+  }, [proceso, modalidad, nivel]);
 
   const handleProcesoChange = (nuevoProceso: ProcesoMinedu) => {
     setProceso(nuevoProceso);
     if (nuevoProceso === 'ACCESO_CARGOS_DIRECTIVOS') {
       setNivel('NO_APLICA');
-      setArea(AREAS_POR_NIVEL.NO_APLICA[0]);
+      setArea(ESPECIALIDADES_DIRECTIVOS_LIST[0]);
     } else {
-      const primerNivel = NIVELES_POR_MODALIDAD[modalidad][0].value;
+      const list = NIVELES_POR_MODALIDAD_DATA[modalidad as ModalidadKey] || NIVELES_POR_MODALIDAD_DATA.EBR;
+      const primerNivel = list[0].value as NivelEducativo;
       setNivel(primerNivel);
-      setArea(AREAS_POR_NIVEL[primerNivel][0]);
+      const areasList = AREAS_POR_MODALIDAD_NIVEL[modalidad as ModalidadKey]?.[primerNivel] || [];
+      setArea(areasList[0] || '');
     }
   };
 
   const handleModalidadChange = (nuevaModalidad: ModalidadEducativa) => {
     setModalidad(nuevaModalidad);
     if (proceso !== 'ACCESO_CARGOS_DIRECTIVOS') {
-      const primerNivel = (NIVELES_POR_MODALIDAD[nuevaModalidad] || NIVELES_POR_MODALIDAD.EBR)[0].value;
+      const list = NIVELES_POR_MODALIDAD_DATA[nuevaModalidad as ModalidadKey] || NIVELES_POR_MODALIDAD_DATA.EBR;
+      const primerNivel = list[0].value as NivelEducativo;
       setNivel(primerNivel);
-      const primerasAreas = AREAS_POR_NIVEL[primerNivel] || AREAS_POR_NIVEL.INICIAL;
-      setArea(primerasAreas[0]);
+      const areasList = AREAS_POR_MODALIDAD_NIVEL[nuevaModalidad as ModalidadKey]?.[primerNivel] || [];
+      setArea(areasList[0] || '');
     }
   };
 
   const handleNivelChange = (nuevoNivel: NivelEducativo) => {
     setNivel(nuevoNivel);
-    const primerasAreas = AREAS_POR_NIVEL[nuevoNivel] || AREAS_POR_NIVEL.INICIAL;
-    setArea(primerasAreas[0]);
+    const areasList = AREAS_POR_MODALIDAD_NIVEL[modalidad as ModalidadKey]?.[nuevoNivel] || [];
+    setArea(areasList[0] || '');
   };
 
   const handleAgregarAnio = async () => {
@@ -487,15 +454,20 @@ export const BancoCuadernillosView: React.FC = () => {
               {proceso === 'ACCESO_CARGOS_DIRECTIVOS' ? 'CARGO A POSTULAR (MINEDU)' : 'ÁREA / ESPECIALIDAD DOCENTE (NIVEL 4)'}
             </label>
             <select
-              value={area}
+              value={areasDisponibles.length === 0 ? '—' : area}
               onChange={(e) => setArea(e.target.value)}
-              className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-xs font-bold text-slate-800 dark:text-white outline-none focus:border-blue-600 cursor-pointer"
+              disabled={areasDisponibles.length === 0}
+              className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-xs font-bold text-slate-800 dark:text-white outline-none focus:border-blue-600 cursor-pointer disabled:opacity-80 disabled:cursor-not-allowed"
             >
-              {areasDisponibles.map((esp) => (
-                <option key={esp} value={esp}>
-                  {esp}
-                </option>
-              ))}
+              {areasDisponibles.length === 0 ? (
+                <option value="—">—</option>
+              ) : (
+                areasDisponibles.map((esp) => (
+                  <option key={esp} value={esp}>
+                    {esp}
+                  </option>
+                ))
+              )}
             </select>
           </div>
 

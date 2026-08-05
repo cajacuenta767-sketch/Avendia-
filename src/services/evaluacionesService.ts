@@ -243,13 +243,22 @@ export async function getEvaluacionesAction(
     if (filters.modalidad && filters.modalidad !== 'TODOS') {
       filteredList = filteredList.filter((e) => e.modalidad === filters.modalidad);
     }
-    if (filters.nivel && filters.nivel !== 'TODOS') {
-      filteredList = filteredList.filter((e) => e.nivel === filters.nivel);
+    if (filters.nivel && filters.nivel !== 'TODOS' && (filters.nivel as string) !== 'NO_APLICA') {
+      const reqNivel = filters.nivel as string;
+      filteredList = filteredList.filter((e) => {
+        if (!e.nivel) return false;
+        const eNivStr = String(e.nivel);
+        if (eNivStr === reqNivel) return true;
+        if (reqNivel === 'EBA_INICIAL_INTERMEDIO') return eNivStr === 'INICIAL' || eNivStr.includes('INICIAL');
+        if (reqNivel === 'EBA_AVANZADO') return eNivStr === 'SECUNDARIA' || eNivStr.includes('AVANZADO');
+        if (reqNivel === 'CETPRO_TECNICO') return eNivStr === 'SECUNDARIA' || eNivStr.includes('TECNICO');
+        return false;
+      });
     }
     const areaTarget = filters.especialidad || filters.searchQuery;
-    if (areaTarget && areaTarget !== 'TODOS' && areaTarget.trim()) {
+    if (areaTarget && areaTarget !== 'TODOS' && areaTarget !== '—' && areaTarget.trim()) {
       const targetLower = areaTarget.trim().toLowerCase();
-      filteredList = filteredList.filter((e) => e.especialidad.toLowerCase().includes(targetLower));
+      filteredList = filteredList.filter((e) => e.especialidad && e.especialidad.toLowerCase().includes(targetLower));
     }
     if (filters.anio && filters.anio !== 'TODOS') {
       filteredList = filteredList.filter((e) => String(e.anio) === String(filters.anio));
