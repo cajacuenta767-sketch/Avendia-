@@ -524,3 +524,42 @@ export async function registrarseDocenteAction(data: {
     creadoPor: data.creadoPor,
   });
 }
+
+export async function getFreshDocenteSessionAction(
+  email: string
+): Promise<ActionResponse<{ id: string; nombre: string; email: string; modalidad?: string; nivel?: string; areas?: string[]; fechaFin: string }>> {
+  try {
+    const emailTerm = (email || '').trim().toLowerCase();
+    if (!emailTerm) {
+      return { success: false, error: { code: 'INVALID_EMAIL', message: 'Email no provisto' } };
+    }
+
+    const user = await prisma.usuarioDocente.findFirst({
+      where: { email: emailTerm },
+    });
+
+    if (!user) {
+      return { success: false, error: { code: 'NOT_FOUND', message: 'Usuario no encontrado' } };
+    }
+
+    let parsedAreas: string[] = [];
+    try {
+      parsedAreas = user.areas ? JSON.parse(user.areas) : [];
+    } catch {}
+
+    return {
+      success: true,
+      data: {
+        id: user.id,
+        nombre: user.nombre,
+        email: user.email,
+        modalidad: user.modalidad || 'EBR',
+        nivel: user.nivel || 'INICIAL',
+        areas: parsedAreas,
+        fechaFin: formatDateTimePE(user.fechaFin),
+      },
+    };
+  } catch (error: any) {
+    return { success: false, error: { code: 'ERROR', message: error?.message || 'Error' } };
+  }
+}

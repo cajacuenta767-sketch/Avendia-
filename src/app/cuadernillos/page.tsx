@@ -9,6 +9,7 @@ import { EvaluationCard } from '@/components/cuadernillos/EvaluationCard';
 import { PdfViewerModal } from '@/components/cuadernillos/PdfViewerModal';
 import { DocenteAuthModal } from '@/components/auth/DocenteAuthModal';
 import { getEvaluacionesAction, getResourceSignedUrlAction } from '@/services/evaluacionesService';
+import { getFreshDocenteSessionAction } from '@/services/usuariosService';
 import {
   Evaluacion,
   EvaluacionesFilterParams,
@@ -226,7 +227,7 @@ function CuadernillosContent() {
     });
   };
 
-  const handleOpenResource = (
+  const handleOpenResource = async (
     evaluationId: string,
     resourceType: 'CUADERNILLO' | 'RESOLUCION' | 'CLAVES'
   ) => {
@@ -237,26 +238,75 @@ function CuadernillosContent() {
     }
 
     try {
-      const session = JSON.parse(sessionStr);
+      let session = JSON.parse(sessionStr);
+
+      // Re-consultar a la base de datos en tiempo real para obtener cualquier cambio realizado por el Admin
+      if (session?.email) {
+        const freshRes = await getFreshDocenteSessionAction(session.email);
+        if (freshRes.success) {
+          session = freshRes.data;
+          localStorage.setItem('docente_session', JSON.stringify(session));
+        }
+      }
+
       const evalTarget = evaluaciones.find((item) => item.id === evaluationId);
 
       if (evalTarget && session) {
-        const userNivel = (session.nivel || '').toUpperCase();
-        const evalNivel = (evalTarget.nivel || '').toUpperCase();
+        const normalize = (str: string) =>
+          (str || '')
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/[^a-z0-9\s]/g, ' ')
+            .trim();
 
-        if (userNivel && userNivel !== 'NO_APLICA' && evalNivel && evalNivel !== 'NO_APLICA' && userNivel !== evalNivel) {
-          alert(`🔒 ACCESO RESTRINGIDO POR NIVEL\n\nTu cuenta docente Premium está asignada únicamente al nivel "${userNivel}". No tienes permiso para acceder a los materiales del nivel "${evalTarget.nivel}".\n\nSolicita la ampliación de tu plan por WhatsApp.`);
+        const userNivel = normalize(session.nivel);
+        const evalNivel = normalize(evalTarget.nivel);
+
+        // 1. Verificación Nivel: Si el usuario es universal (NO_APLICA, TODOS, etc.), permitir acceso
+        const isNivelUniversal =
+          !userNivel ||
+          userNivel.includes('no aplica') ||
+          userNivel.includes('todos') ||
+          userNivel.includes('todas');
+
+        if (!isNivelUniversal && evalNivel && !evalNivel.includes('no aplica') && !evalNivel.includes(userNivel) && !userNivel.includes(evalNivel)) {
+          alert(`🔒 ACCESO RESTRINGIDO POR NIVEL\n\nTu cuenta docente Premium está asignada únicamente al nivel "${session.nivel}". No tienes permiso para acceder a los materiales del nivel "${evalTarget.nivel}".\n\nSolicita la ampliación de tu plan por WhatsApp.`);
           return;
         }
 
+        // 2. Verificación Área / Especialidad Flexible
         if (session.areas && Array.isArray(session.areas) && session.areas.length > 0) {
-          const userAreas = session.areas.map((a: string) => a.toLowerCase().trim());
-          const evalArea = ((evalTarget as any).area || evalTarget.especialidad || '').toLowerCase().trim();
+          const userAreas = session.areas.map((a: string) => normalize(a));
 
-          const hasAreaAccess = userAreas.some((ua: string) => evalArea.includes(ua) || ua.includes(evalArea));
-          if (!hasAreaAccess) {
-            alert(`🔒 ACCESO RESTRINGIDO POR ESPECIALIDAD\n\nTu suscripción Premium no incluye el área "${evalTarget.especialidad}".\n\nEspecialidades habilitadas en tu cuenta: ${session.areas.join(', ')}.`);
-            return;
+          const isUniversalArea = userAreas.some(
+            (ua: string) =>
+              ua.includes('todos') ||
+              ua.includes('todas') ||
+              ua.includes('completo') ||
+              ua.includes('general') ||
+              ua.includes('acceso total') ||
+              ua.includes('ambos')
+          );
+
+          if (!isUniversalArea) {
+            const targetText = normalize(
+              `${evalTarget.titulo} ${evalTarget.especialidadLabel} ${(evalTarget as any).area || ''} ${evalTarget.especialidad || ''}`
+            );
+
+            const hasAccess = userAreas.some((ua: string) => {
+              if (!ua) return false;
+              if (targetText.includes(ua) || ua.includes(targetText)) return true;
+
+              // Comparación por palabras clave de 3 o más letras (ej: "inicial", "aip", "primaria", "matematica")
+              const words = ua.split(/\s+/).filter((w) => w.length >= 3);
+              return words.some((word) => targetText.includes(word));
+            });
+
+            if (!hasAccess) {
+              alert(`🔒 ACCESO RESTRINGIDO POR ESPECIALIDAD\n\nTu suscripción Premium no incluye el área "${evalTarget.especialidad || evalTarget.especialidadLabel}".\n\nEspecialidades habilitadas en tu cuenta: ${session.areas.join(', ')}.`);
+              return;
+            }
           }
         }
       }

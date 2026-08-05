@@ -421,6 +421,7 @@ export const UsuariosView: React.FC = () => {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-gray-50/80 dark:bg-slate-800/60 border-b border-gray-200/80 dark:border-slate-800 text-[10px] font-black uppercase tracking-wider text-slate-400">
+                <th className="p-4">DOCENTE / CORREO</th>
                 <th className="p-4">ROL</th>
                 <th className="p-4">MODALIDAD</th>
                 <th className="p-4">NIVEL</th>
@@ -438,7 +439,7 @@ export const UsuariosView: React.FC = () => {
             <tbody className="divide-y divide-gray-100 dark:divide-slate-800 text-xs">
               {filteredUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="p-10 text-center text-slate-400 font-bold">
+                  <td colSpan={11} className="p-10 text-center text-slate-400 font-bold">
                     No se encontraron registros de accesos.
                   </td>
                 </tr>
@@ -455,6 +456,18 @@ export const UsuariosView: React.FC = () => {
 
                   return (
                     <tr key={u.id} className="hover:bg-gray-50/60 dark:hover:bg-slate-800/40 transition-colors">
+                      {/* 0. DOCENTE / CORREO */}
+                      <td className="p-4">
+                        <div className="space-y-0.5">
+                          <p className="font-extrabold text-slate-900 dark:text-white truncate max-w-[200px]">
+                            {u.nombre}
+                          </p>
+                          <p className="text-[11px] font-semibold text-blue-600 dark:text-blue-400 font-mono truncate max-w-[200px]">
+                            {u.email}
+                          </p>
+                        </div>
+                      </td>
+
                       {/* 1. ROL */}
                       <td className="p-4">
                         <span className="bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 text-[10px] font-black uppercase px-3 py-1 rounded-full">
