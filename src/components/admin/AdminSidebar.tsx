@@ -5,7 +5,6 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 
 export type AdminTab = 'inicio' | 'usuarios' | 'cuadernillos' | 'recursos';
-
 interface AdminSidebarProps {
   activeTab: AdminTab;
   onTabChange: (tab: AdminTab) => void;
@@ -13,22 +12,73 @@ interface AdminSidebarProps {
 }
 
 export const AdminSidebar: React.FC<AdminSidebarProps> = ({ activeTab, onTabChange, onLogout }) => {
-  const [adminUser, setAdminUser] = useState<{ name: string; role: string }>({
-    name: 'Juan Avend',
-    role: 'SUPERADMINISTRADOR',
+  const [adminUser, setAdminUser] = useState<{ name: string; email: string; role: string }>(() => {
+    if (typeof window !== 'undefined') {
+      const sessionStr = localStorage.getItem('admin_auth_session') || sessionStorage.getItem('admin_auth_session');
+      if (sessionStr) {
+        try {
+          const parsed = JSON.parse(sessionStr);
+          const email = (parsed.email || '').toLowerCase();
+          const isSuper = email === 'cajacuenta767@gmail.com';
+          return {
+            name: parsed.name || 'Administrador',
+            email: parsed.email || '',
+            role: isSuper ? 'SUPERADMINISTRADOR' : (parsed.role || 'ADMINISTRADOR'),
+          };
+        } catch {}
+      }
+    }
+    return {
+      name: 'Administrador',
+      email: '',
+      role: 'ADMINISTRADOR',
+    };
   });
+
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
+  const [permissions, setPermissions] = useState({
+    permisoUsuarios: true,
+    permisoCuadernillos: true,
+    permisoRecursos: true,
+    permisoMetricas: true,
+  });
+
   useEffect(() => {
-    const sessionStr = localStorage.getItem('admin_auth_session') || sessionStorage.getItem('admin_auth_session');
-    if (sessionStr) {
-      try {
-        const parsed = JSON.parse(sessionStr);
-        if (parsed.name) {
-          setAdminUser({ name: parsed.name, role: parsed.role || 'ADMINISTRADOR' });
-        }
-      } catch {}
-    }
+    const updateSession = () => {
+      const sessionStr = localStorage.getItem('admin_auth_session') || sessionStorage.getItem('admin_auth_session');
+      if (sessionStr) {
+        try {
+          const parsed = JSON.parse(sessionStr);
+          const email = (parsed.email || '').toLowerCase();
+          const isSuper = email === 'cajacuenta767@gmail.com';
+          setAdminUser({
+            name: parsed.name || 'Administrador',
+            email: parsed.email || '',
+            role: isSuper ? 'SUPERADMINISTRADOR' : (parsed.role || 'ADMINISTRADOR'),
+          });
+          if (isSuper) {
+            setPermissions({
+              permisoUsuarios: true,
+              permisoCuadernillos: true,
+              permisoRecursos: true,
+              permisoMetricas: true,
+            });
+          } else {
+            setPermissions({
+              permisoUsuarios: parsed.permisoUsuarios ?? true,
+              permisoCuadernillos: parsed.permisoCuadernillos ?? true,
+              permisoRecursos: parsed.permisoRecursos ?? true,
+              permisoMetricas: parsed.permisoMetricas ?? true,
+            });
+          }
+        } catch {}
+      }
+    };
+
+    updateSession();
+    window.addEventListener('admin_session_change', updateSession);
+    return () => window.removeEventListener('admin_session_change', updateSession);
   }, []);
 
   const initials = adminUser.name
@@ -41,6 +91,33 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ activeTab, onTabChan
   const handleSelectTab = (tab: AdminTab) => {
     onTabChange(tab);
     setIsMobileMenuOpen(false);
+  };
+
+  const handleVerComoDocente = () => {
+    try {
+      let currentName = adminUser.name;
+      let currentEmail = adminUser.email;
+
+      const rawSession = localStorage.getItem('admin_auth_session') || sessionStorage.getItem('admin_auth_session');
+      if (rawSession) {
+        try {
+          const parsed = JSON.parse(rawSession);
+          if (parsed.name) currentName = parsed.name;
+          if (parsed.email) currentEmail = parsed.email;
+        } catch {}
+      }
+
+      localStorage.setItem(
+        'docente_session',
+        JSON.stringify({
+          id: 'admin-preview-session',
+          nombre: currentName,
+          email: currentEmail,
+          fechaFin: '2099-12-31',
+        })
+      );
+      window.dispatchEvent(new Event('docente_session_change'));
+    } catch {}
   };
 
   return (
@@ -62,10 +139,6 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ activeTab, onTabChan
         </div>
 
         <div className="flex items-center space-x-2">
-          <span className="text-[11px] font-extrabold px-2 py-0.5 rounded-full bg-slate-800 text-slate-300">
-            {activeTab.toUpperCase()}
-          </span>
-
           <button
             type="button"
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
@@ -133,6 +206,22 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ activeTab, onTabChan
               </svg>
               <span>Recursos</span>
             </button>
+
+            {/* Ver como docente en menú desplegable móvil */}
+            <Link
+              href="/cuadernillos"
+              onClick={() => {
+                setIsMobileMenuOpen(false);
+                handleVerComoDocente();
+              }}
+              className="col-span-2 flex items-center justify-center space-x-2 px-3 py-2.5 rounded-xl text-xs font-bold text-blue-300 bg-blue-950/60 border border-blue-800/60 transition-all hover:bg-blue-900/60 cursor-pointer"
+            >
+              <svg className="w-4 h-4 text-blue-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+              </svg>
+              <span>Ver como docente</span>
+            </Link>
           </nav>
 
           <div className="pt-2 border-t border-slate-800 flex items-center justify-between">
@@ -191,56 +280,96 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ activeTab, onTabChan
             </button>
 
             {/* Usuarios */}
-            <button
-              type="button"
-              onClick={() => onTabChange('usuarios')}
-              className={`w-full flex items-center space-x-3 px-3.5 py-3 rounded-xl text-xs font-bold transition-all text-left ${
-                activeTab === 'usuarios'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
-              }`}
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-              </svg>
-              <span>Usuarios</span>
-            </button>
+            {permissions.permisoUsuarios ? (
+              <button
+                type="button"
+                onClick={() => onTabChange('usuarios')}
+                className={`w-full flex items-center space-x-3 px-3.5 py-3 rounded-xl text-xs font-bold transition-all text-left ${
+                  activeTab === 'usuarios'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+                }`}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                </svg>
+                <span>Usuarios</span>
+              </button>
+            ) : (
+              <div
+                className="w-full flex items-center justify-between px-3.5 py-3 rounded-xl text-xs font-bold text-slate-600 bg-slate-900/50 cursor-not-allowed opacity-60"
+                title="Módulo 1: Gestión de Usuarios bloqueado para tu perfil"
+              >
+                <div className="flex items-center space-x-3">
+                  <span>🔒</span>
+                  <span className="line-through">Usuarios</span>
+                </div>
+                <span className="text-[9px] font-black uppercase text-slate-500">Sin Permiso</span>
+              </div>
+            )}
 
             {/* Banco de cuadernillos */}
-            <button
-              type="button"
-              onClick={() => onTabChange('cuadernillos')}
-              className={`w-full flex items-center space-x-3 px-3.5 py-3 rounded-xl text-xs font-bold transition-all text-left ${
-                activeTab === 'cuadernillos'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
-              }`}
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              <span>Banco de cuadernillos</span>
-            </button>
+            {permissions.permisoCuadernillos ? (
+              <button
+                type="button"
+                onClick={() => onTabChange('cuadernillos')}
+                className={`w-full flex items-center space-x-3 px-3.5 py-3 rounded-xl text-xs font-bold transition-all text-left ${
+                  activeTab === 'cuadernillos'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+                }`}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <span>Banco de cuadernillos</span>
+              </button>
+            ) : (
+              <div
+                className="w-full flex items-center justify-between px-3.5 py-3 rounded-xl text-xs font-bold text-slate-600 bg-slate-900/50 cursor-not-allowed opacity-60"
+                title="Módulo 2: Banco de Cuadernillos bloqueado para tu perfil"
+              >
+                <div className="flex items-center space-x-3">
+                  <span>🔒</span>
+                  <span className="line-through">Cuadernillos</span>
+                </div>
+                <span className="text-[9px] font-black uppercase text-slate-500">Sin Permiso</span>
+              </div>
+            )}
 
             {/* Recursos */}
-            <button
-              type="button"
-              onClick={() => onTabChange('recursos')}
-              className={`w-full flex items-center space-x-3 px-3.5 py-3 rounded-xl text-xs font-bold transition-all text-left ${
-                activeTab === 'recursos'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
-              }`}
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
-              <span>Recursos</span>
-            </button>
+            {permissions.permisoRecursos ? (
+              <button
+                type="button"
+                onClick={() => onTabChange('recursos')}
+                className={`w-full flex items-center space-x-3 px-3.5 py-3 rounded-xl text-xs font-bold transition-all text-left ${
+                  activeTab === 'recursos'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+                }`}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <span>Recursos</span>
+              </button>
+            ) : (
+              <div
+                className="w-full flex items-center justify-between px-3.5 py-3 rounded-xl text-xs font-bold text-slate-600 bg-slate-900/50 cursor-not-allowed opacity-60"
+                title="Módulo 3: Recursos Didácticos bloqueado para tu perfil"
+              >
+                <div className="flex items-center space-x-3">
+                  <span>🔒</span>
+                  <span className="line-through">Recursos</span>
+                </div>
+                <span className="text-[9px] font-black uppercase text-slate-500">Sin Permiso</span>
+              </div>
+            )}
 
             {/* Ver como docente */}
             <Link
               href="/cuadernillos"
+              onClick={handleVerComoDocente}
               className="w-full flex items-center space-x-3 px-3.5 py-3 rounded-xl text-xs font-bold text-slate-400 hover:text-white hover:bg-slate-800/60 transition-colors"
             >
               <svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -229,16 +229,28 @@ function CuadernillosContent() {
     resourceType: 'CUADERNILLO' | 'RESOLUCION' | 'CLAVES'
   ) => {
     const sessionStr = localStorage.getItem('docente_session');
-    if (!sessionStr) {
+    const adminSessionStr = localStorage.getItem('admin_auth_session') || sessionStorage.getItem('admin_auth_session');
+
+    if (!sessionStr && !adminSessionStr) {
       router.push('/#login-form');
       return;
     }
 
     try {
-      let session = JSON.parse(sessionStr);
+      let session = sessionStr ? JSON.parse(sessionStr) : null;
+      if (!session && adminSessionStr) {
+        session = {
+          id: 'admin-preview-session',
+          nombre: 'Administrador',
+          email: 'admin@avendescala.pe',
+          nivel: 'NO_APLICA',
+          area: 'TODAS',
+          areas: ['TODAS'],
+        };
+      }
 
       // Re-consultar a la base de datos en tiempo real para obtener cualquier cambio realizado por el Admin
-      if (session?.email) {
+      if (session?.email && session.id !== 'admin-preview-session') {
         const freshRes = await getFreshDocenteSessionAction(session.email);
         if (freshRes.success) {
           session = freshRes.data;
@@ -331,6 +343,49 @@ function CuadernillosContent() {
 
   const currentTheme = PROCESS_THEMES[procesoTitleKey] || PROCESS_THEMES.NOMBRAMIENTO_DOCENTE;
 
+  const isNombramiento = procesoTitleKey === 'NOMBRAMIENTO_DOCENTE';
+
+  const habGeneralesList = React.useMemo(() => {
+    return evaluaciones.filter((item) => {
+      const espLower = (item.especialidad || '').toLowerCase().trim();
+      const titleLower = (item.titulo || '').toLowerCase().trim();
+      return (
+        espLower.includes('habilidades generales') ||
+        espLower.includes('general') ||
+        espLower.includes('comprension lectora') ||
+        espLower.includes('comprensión lectora') ||
+        espLower.includes('razonamiento logico') ||
+        espLower.includes('razonamiento lógico') ||
+        titleLower.includes('habilidades generales') ||
+        titleLower.includes('comprensión lectora') ||
+        titleLower.includes('razonamiento lógico') ||
+        titleLower.includes('subprueba 1') ||
+        titleLower.includes('subprueba 2')
+      );
+    });
+  }, [evaluaciones]);
+
+  const curricularesPedagogicosList = React.useMemo(() => {
+    return evaluaciones.filter((item) => {
+      const espLower = (item.especialidad || '').toLowerCase().trim();
+      const titleLower = (item.titulo || '').toLowerCase().trim();
+      const isHg = (
+        espLower.includes('habilidades generales') ||
+        espLower.includes('general') ||
+        espLower.includes('comprension lectora') ||
+        espLower.includes('comprensión lectora') ||
+        espLower.includes('razonamiento logico') ||
+        espLower.includes('razonamiento lógico') ||
+        titleLower.includes('habilidades generales') ||
+        titleLower.includes('comprensión lectora') ||
+        titleLower.includes('razonamiento lógico') ||
+        titleLower.includes('subprueba 1') ||
+        titleLower.includes('subprueba 2')
+      );
+      return !isHg;
+    });
+  }, [evaluaciones]);
+
   return (
     <main className="min-h-screen bg-slate-50 dark:bg-slate-950 transition-colors duration-500 pb-16">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
@@ -376,7 +431,7 @@ function CuadernillosContent() {
           <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div className="space-y-2 max-w-xl">
               <div className="flex items-center space-x-2 text-[10px] font-black uppercase tracking-wider text-gray-400">
-                <span className="text-gray-400">BANCO DE EVALUACIONES MINEDU</span>
+                <span className="text-gray-400">REPOSITORIO DOCUMENTAL MINEDU</span>
               </div>
 
               <h1 className="text-2xl sm:text-3xl font-black text-gray-900 dark:text-white tracking-tight">
@@ -384,7 +439,7 @@ function CuadernillosContent() {
               </h1>
 
               <p className="text-xs text-gray-500 dark:text-slate-400 leading-relaxed">
-                Encuentra evaluaciones anteriores, revisa sus claves y estudia con resoluciones desarrolladas paso a paso.
+                Repositorio ordenado de evaluaciones anteriores, claves oficiales y resoluciones desarrolladas paso a paso.
               </p>
             </div>
 
@@ -431,13 +486,13 @@ function CuadernillosContent() {
           activeProceso={procesoTitleKey}
         />
 
-        {/* Sección de Resultados */}
-        <div className="space-y-4 pt-2">
+        {/* Sección de Resultados Organizada por Categorías */}
+        <div className="space-y-6 pt-2">
           <div className="flex items-center justify-between border-b border-gray-200/80 dark:border-slate-800 pb-3">
             <div className="flex items-center space-x-2">
               <div className={`w-1 h-5 rounded-full ${currentTheme.accentBar}`} />
               <div>
-                <span className="text-[9px] font-black uppercase text-gray-400 tracking-wider block">RESULTADOS</span>
+                <span className="text-[9px] font-black uppercase text-gray-400 tracking-wider block">REPOSITORIO DE MATERIALES</span>
                 <h2 className="text-lg font-extrabold text-gray-900 dark:text-white tracking-tight">
                   Evaluaciones de <span className={currentTheme.titleColor}>{currentTheme.highlight}</span>
                 </h2>
@@ -445,7 +500,7 @@ function CuadernillosContent() {
             </div>
             
             <span className="text-xs font-semibold text-gray-400">
-              {evaluaciones.length} materiales encontrados para tu selección
+              {evaluaciones.length} materiales encontrados
             </span>
           </div>
 
@@ -461,10 +516,10 @@ function CuadernillosContent() {
           ) : evaluaciones.length === 0 ? (
             <div className="text-center py-16 px-4 bg-white dark:bg-slate-900 rounded-3xl border border-gray-200/80 dark:border-slate-800 shadow-2xs space-y-2">
               <h3 className="text-base font-bold text-gray-900 dark:text-white">
-                Selecciona un nivel para continuar
+                Selecciona la modalidad, nivel y área para consultar
               </h3>
               <p className="text-xs text-gray-400 dark:text-slate-500">
-                Completa los filtros o prueba con otra opción.
+                Usa los filtros superiores para explorar los materiales del repositorio.
               </p>
               <button
                 onClick={handleResetFilters}
@@ -473,7 +528,93 @@ function CuadernillosContent() {
                 Limpiar filtros
               </button>
             </div>
+          ) : isNombramiento ? (
+            /* LÓGICA ESTRUCTURADA REQUERIDA POR EL CLIENTE PARA NOMBRAMIENTO: 2 CATEGORÍAS SEPARADAS */
+            <div className="space-y-8">
+              {/* CATEGORÍA 1: CUADERNILLOS DE HABILIDADES GENERALES */}
+              <div className="space-y-4 bg-white dark:bg-slate-900 p-5 sm:p-6 rounded-3xl border border-purple-200/90 dark:border-purple-900/40 shadow-xs">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-purple-100 dark:border-purple-900/30 pb-4">
+                  <div className="space-y-1">
+                    <div className="inline-flex items-center space-x-1.5 px-3 py-0.5 rounded-full bg-purple-100 dark:bg-purple-950/80 text-purple-800 dark:text-purple-300 text-[10px] font-black uppercase tracking-wider border border-purple-200 dark:border-purple-800">
+                      <span>🧠 COMPRENSIÓN LECTORA Y RAZONAMIENTO LÓGICO</span>
+                    </div>
+                    <h3 className="text-lg font-black text-slate-900 dark:text-white tracking-tight">
+                      Cuadernillos de Habilidades Generales
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Subpruebas oficiales MINEDU de Comprensión Lectora y Razonamiento Lógico Matemático.
+                    </p>
+                  </div>
+                  <span className="px-3 py-1 rounded-xl bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 text-xs font-extrabold shrink-0 self-start sm:self-auto">
+                    {habGeneralesList.length} {habGeneralesList.length === 1 ? 'cuadernillo' : 'cuadernillos'}
+                  </span>
+                </div>
+
+                {habGeneralesList.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-1">
+                    {habGeneralesList.map((evaluacion) => (
+                      <EvaluationCard
+                        key={evaluacion.id}
+                        evaluacion={evaluacion}
+                        onOpenResource={handleOpenResource}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 px-4 bg-purple-50/40 dark:bg-purple-950/20 rounded-2xl border border-dashed border-purple-200 dark:border-purple-900/40 text-slate-500 dark:text-slate-400 space-y-1">
+                    <p className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                      No hay cuadernillos de Habilidades Generales para la combinación seleccionada.
+                    </p>
+                    <p className="text-[11px]">
+                      Ajusta el año o limpia los filtros para explorar otros archivos del repositorio.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* CATEGORÍA 2: CUADERNILLOS DE CONOCIMIENTO CURRICULARES Y PEDAGÓGICOS */}
+              <div className="space-y-4 bg-white dark:bg-slate-900 p-5 sm:p-6 rounded-3xl border border-blue-200/90 dark:border-blue-900/40 shadow-xs">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-blue-100 dark:border-blue-900/30 pb-4">
+                  <div className="space-y-1">
+                    <div className="inline-flex items-center space-x-1.5 px-3 py-0.5 rounded-full bg-blue-100 dark:bg-blue-950/80 text-blue-800 dark:text-blue-300 text-[10px] font-black uppercase tracking-wider border border-blue-200 dark:border-blue-800">
+                      <span>📘 ESPECIALIDAD Y PEDAGOGÍA</span>
+                    </div>
+                    <h3 className="text-lg font-black text-slate-900 dark:text-white tracking-tight">
+                      Cuadernillos de Conocimiento Curriculares y Pedagógicos
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Evaluaciones de conocimientos disciplinares, didácticos y pedagógicos del nivel y área.
+                    </p>
+                  </div>
+                  <span className="px-3 py-1 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 text-xs font-extrabold shrink-0 self-start sm:self-auto">
+                    {curricularesPedagogicosList.length} {curricularesPedagogicosList.length === 1 ? 'cuadernillo' : 'cuadernillos'}
+                  </span>
+                </div>
+
+                {curricularesPedagogicosList.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-1">
+                    {curricularesPedagogicosList.map((evaluacion) => (
+                      <EvaluationCard
+                        key={evaluacion.id}
+                        evaluacion={evaluacion}
+                        onOpenResource={handleOpenResource}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 px-4 bg-blue-50/40 dark:bg-blue-950/20 rounded-2xl border border-dashed border-blue-200 dark:border-blue-900/40 text-slate-500 dark:text-slate-400 space-y-1">
+                    <p className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                      No hay cuadernillos de Conocimientos Curriculares y Pedagógicos para el área o nivel seleccionado.
+                    </p>
+                    <p className="text-[11px]">
+                      Selecciona una especialidad o área para desplegar las evaluaciones correspondientes.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
           ) : (
+            /* VISTA ESTÁNDAR DE REPOSITORIO PARA OTROS PROCESOS (ASCENSO, DIRECTIVOS) */
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5 w-full max-w-6xl mx-auto my-4">
               {evaluaciones.map((evaluacion) => (
                 <EvaluationCard

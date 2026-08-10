@@ -5,6 +5,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { getWhatsAppLink } from '@/lib/whatsapp';
 import { solicitarCodigoOtpAction, verificarCodigoOtpAction } from '@/services/usuariosService';
+import { checkIsAdminEmailAction } from '@/services/adminService';
 
 export const LoginForm: React.FC = () => {
   const router = useRouter();
@@ -47,6 +48,7 @@ export const LoginForm: React.FC = () => {
     }
 
     setIsLoading(true);
+
     const res = await solicitarCodigoOtpAction(email);
     setIsLoading(false);
 
@@ -111,6 +113,13 @@ export const LoginForm: React.FC = () => {
     setIsLoading(false);
 
     if (res.success) {
+      if (res.data.isAdmin) {
+        localStorage.removeItem('admin_auth_session');
+        sessionStorage.removeItem('admin_auth_session');
+        window.location.href = `/admin?email=${encodeURIComponent(res.data.email)}`;
+        return;
+      }
+
       const docenteData = {
         id: res.data.id,
         nombre: res.data.nombre,
@@ -179,7 +188,7 @@ export const LoginForm: React.FC = () => {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="avendocente@gmail.com"
+                placeholder="example@gmail.com"
                 className="w-full h-12 px-4 rounded-2xl border border-slate-200 dark:border-slate-700 bg-[#f8fafc] dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 text-xs font-bold focus:ring-2 focus:ring-blue-600 focus:bg-white outline-none transition-all"
               />
             </div>

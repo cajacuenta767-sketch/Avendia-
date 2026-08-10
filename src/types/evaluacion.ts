@@ -38,6 +38,9 @@ export interface ResourceLinks {
   origenCuadernillo?: 'MINEDU' | 'AVEND' | string;
   origenResolucion?: 'AVEND' | 'MINEDU' | string;
   origenClaves?: 'MINEDU' | 'AVEND' | string;
+  codigoCuadernillo?: string;
+  codigoResolucion?: string;
+  codigoClaves?: string;
 }
 
 export interface Evaluacion {
@@ -50,6 +53,9 @@ export interface Evaluacion {
   especialidad: EspecialidadMinedu | string;
   especialidadLabel: string;   // Nombre amigable ej. "Secundaria - Matemática"
   codigo?: string;             // Código específico de cuadernillo ingresado por Admin
+  codigoCuadernillo?: string;
+  codigoResolucion?: string;
+  codigoClaves?: string;
   anio: number;
   isLatest?: boolean;          // Badge "Más Reciente"
   resources: ResourceLinks;

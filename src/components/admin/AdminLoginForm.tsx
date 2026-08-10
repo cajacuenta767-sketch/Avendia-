@@ -1,20 +1,12 @@
 // src/components/admin/AdminLoginForm.tsx
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { verifyAdminCredentialsAction } from '@/services/adminService';
 
 interface AdminLoginFormProps {
   onSuccess: () => void;
 }
-
-const FIVE_ADMINS = [
-  { name: 'Juan Avend', role: 'SUPERADMINISTRADOR', email: 'admin@avend.pe', pass: 'AdminAvend2026!' },
-  { name: 'Administrador 01', role: 'ADMINISTRADOR', email: 'administrador@avend.pe', pass: 'AvendAdmin2026!' },
-  { name: 'Carlos Mendoza', role: 'SOPORTE Y LICENCIAS', email: 'soporte@avend.pe', pass: 'SoporteAvend2026!' },
-  { name: 'María Fernanda', role: 'CONTENIDO MINEDU', email: 'evaluaciones@avend.pe', pass: 'MineduAvend2026!' },
-  { name: 'Diego Ramírez', role: 'AUDITOR SAAS', email: 'auditoria@avend.pe', pass: 'AuditoriaAvend2026!' },
-];
 
 export const AdminLoginForm: React.FC<AdminLoginFormProps> = ({ onSuccess }) => {
   const [userOrEmail, setUserOrEmail] = useState('');
@@ -22,141 +14,99 @@ export const AdminLoginForm: React.FC<AdminLoginFormProps> = ({ onSuccess }) => 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const emailParam = urlParams.get('email');
+      if (emailParam) {
+        setUserOrEmail(emailParam);
+      } else {
+        setUserOrEmail('admin@avend.pe');
+      }
+    }
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!userOrEmail.trim() || !passOrPin.trim()) {
-      setErrorMsg('⚠️ Por favor ingresa el usuario y la contraseña.');
+    if (!passOrPin.trim()) {
+      setErrorMsg('⚠️ Ingresa tu código de 4 dígitos o PIN.');
       return;
     }
 
     setIsSubmitting(true);
     setErrorMsg(null);
 
-    const res = await verifyAdminCredentialsAction(userOrEmail, passOrPin);
+    const emailToUse = userOrEmail.trim() || 'admin@avend.pe';
+    const res = await verifyAdminCredentialsAction(emailToUse, passOrPin.trim());
     setIsSubmitting(false);
 
     if (res.success) {
       const sessionData = {
         token: res.data.token,
         name: res.data.name,
+        email: res.data.email || emailToUse,
         role: res.data.role,
+        permisoUsuarios: res.data.permisoUsuarios ?? true,
+        permisoCuadernillos: res.data.permisoCuadernillos ?? true,
+        permisoRecursos: res.data.permisoRecursos ?? true,
+        permisoMetricas: res.data.permisoMetricas ?? true,
         loggedInAt: new Date().toISOString(),
       };
       localStorage.setItem('admin_auth_session', JSON.stringify(sessionData));
       sessionStorage.setItem('admin_auth_session', JSON.stringify(sessionData));
+      window.dispatchEvent(new Event('admin_session_change'));
       onSuccess();
     } else {
-      setErrorMsg(`❌ ${res.error.message}`);
+      setErrorMsg(`❌ Código o PIN incorrecto.`);
     }
   };
 
-  const handleSelectQuickAccount = (email: string, pass: string) => {
-    setUserOrEmail(email);
-    setPassOrPin(pass);
-  };
-
   return (
-    <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center p-4 relative overflow-hidden font-sans">
-      {/* Luces y Gradientes Atmosféricos de Fondo */}
-      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-blue-600/20 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-10 right-10 w-80 h-80 bg-rose-600/10 rounded-full blur-3xl pointer-events-none" />
-
-      <div className="relative z-10 w-full max-w-lg bg-slate-900/90 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl backdrop-blur-md space-y-6">
-        {/* Header de Autenticación */}
-        <div className="text-center space-y-2">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-blue-600/20 text-blue-400 border border-blue-500/30 text-2xl mb-2">
-            🔒
+    <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+      <div className="w-full max-w-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 sm:p-7 shadow-2xl space-y-5 text-center animate-in zoom-in-95 duration-150">
+        {/* Icono y Título del Cuadro Pequeño */}
+        <div className="space-y-2">
+          <div className="w-12 h-12 rounded-2xl bg-blue-50 dark:bg-slate-800 text-blue-600 dark:text-blue-400 font-black text-xl flex items-center justify-center mx-auto shadow-2xs">
+            🔑
           </div>
-          <span className="text-[10px] font-black uppercase tracking-widest text-blue-400 block">
-            CONSOLA DE GESTIÓN ADMINISTRATIVA SAAS
-          </span>
-          <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">
-            Avend Escala Dashboard
-          </h1>
-          <p className="text-xs text-slate-400">
-            Ingresa con cualquiera de las 5 cuentas oficiales de administración.
+          <h3 className="text-base font-black text-slate-900 dark:text-white uppercase tracking-tight">
+            Código de Acceso Personalizado
+          </h3>
+          <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+            Ingresa el código o PIN asignado por el Superadministrador para ingresar al Dashboard.
           </p>
         </div>
 
-        {/* Mensaje de Error */}
+        {/* Error Notification */}
         {errorMsg && (
-          <div className="bg-rose-950/80 border border-rose-800 text-rose-200 text-xs font-bold p-3.5 rounded-2xl animate-in fade-in flex items-center space-x-2">
-            <span>{errorMsg}</span>
+          <div className="p-3 bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-900/50 text-rose-600 dark:text-rose-300 text-xs font-bold rounded-xl animate-in fade-in">
+            {errorMsg}
           </div>
         )}
 
-        {/* Formulario */}
+        {/* Formulario que PIDE ÚNICAMENTE EL CÓDIGO PERSONALIZADO */}
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-1.5">
-            <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider">
-              USUARIO O CORREO ADMINISTRADOR
-            </label>
-            <input
-              type="text"
-              required
-              placeholder="admin@avend.pe"
-              value={userOrEmail}
-              onChange={(e) => setUserOrEmail(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3.5 text-xs font-bold text-white outline-none focus:border-blue-500 transition-colors"
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider">
-              CONTRASEÑA / CLAVE MASTER
-            </label>
+          <div className="space-y-1">
             <input
               type="password"
+              autoFocus
+              maxLength={12}
               required
-              placeholder="••••••••••••"
+              placeholder="CÓDIGO DE ACCESO / PIN"
               value={passOrPin}
               onChange={(e) => setPassOrPin(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3.5 text-xs font-bold text-white outline-none focus:border-blue-500 transition-colors"
+              className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-3.5 text-center text-sm font-black text-slate-900 dark:text-white tracking-widest font-mono outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20 transition-all"
             />
           </div>
 
           <button
             type="submit"
             disabled={isSubmitting}
-            className="w-full py-3.5 px-4 bg-blue-600 hover:bg-blue-700 active:scale-98 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-blue-600/30 transition-all cursor-pointer flex items-center justify-center space-x-2"
+            className="w-full py-3.5 px-4 bg-blue-600 hover:bg-blue-700 active:scale-98 text-white font-extrabold text-xs uppercase tracking-wider rounded-2xl shadow-lg shadow-blue-600/20 transition-all cursor-pointer flex items-center justify-center space-x-2"
           >
-            <span>{isSubmitting ? 'Verificando...' : 'INGRESAR AL DASHBOARD ADMINISTRADOR →'}</span>
+            <span>{isSubmitting ? 'Verificando...' : 'INGRESAR AL DASHBOARD →'}</span>
           </button>
         </form>
-
-        {/* Catálogo Interactivo de las 5 Cuentas de Administrador */}
-        <div className="bg-slate-950/80 border border-slate-800/80 rounded-2xl p-4 space-y-3 text-left text-xs">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-black uppercase text-amber-400 block tracking-wider">
-              🔑 LISTA DE 5 ADMINISTRADORES ACTIVOS
-            </span>
-            <span className="text-[10px] text-slate-400 font-bold">Haz clic en uno para auto-llenar</span>
-          </div>
-
-          <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
-            {FIVE_ADMINS.map((acc, i) => (
-              <button
-                key={acc.email}
-                type="button"
-                onClick={() => handleSelectQuickAccount(acc.email, acc.pass)}
-                className="w-full bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-blue-500/50 p-2.5 rounded-xl text-left transition-all flex items-center justify-between cursor-pointer group"
-              >
-                <div className="space-y-0.5">
-                  <div className="flex items-center space-x-2">
-                    <span className="text-[10px] font-black uppercase text-blue-400">{i + 1}. {acc.name}</span>
-                    <span className="text-[9px] bg-slate-800 text-slate-300 font-bold px-2 py-0.5 rounded-md">
-                      {acc.role}
-                    </span>
-                  </div>
-                  <p className="text-slate-400 font-mono text-[10px] truncate">
-                    Correo: <strong className="text-white">{acc.email}</strong> | Clave: <strong className="text-emerald-400">{acc.pass}</strong>
-                  </p>
-                </div>
-                <span className="text-slate-500 group-hover:text-white font-bold text-xs">→</span>
-              </button>
-            ))}
-          </div>
-        </div>
       </div>
     </div>
   );

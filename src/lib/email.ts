@@ -40,7 +40,8 @@ export async function sendOtpEmail({ toEmail, otpCode }: SendOtpEmailParams): Pr
         <!-- Cabecera Azul Institucional -->
         <div style="background: linear-gradient(135deg, #3b82f6 0%, #1e3a8a 100%); padding: 34px 20px; text-align: center; color: #ffffff;">
           <h1 style="font-size: 30px; font-weight: 900; margin: 0; letter-spacing: -0.5px; text-transform: uppercase;">AVEND ESCALA</h1>
-          <p style="font-size: 13px; margin: 6px 0 0 0; opacity: 0.9; font-weight: 500;">Plataforma de preparación docente</p>
+          <p style="font-size: 13px; margin: 6px 0 0 0; opacity: 0.95; font-weight: 700;">Plataforma de preparación docente</p>
+          <p style="font-size: 12px; margin: 4px 0 0 0; opacity: 0.85; font-weight: 500; letter-spacing: 0.2px;">Banco de exámenes, claves y resolución.</p>
         </div>
 
         <!-- Cuerpo del Mensaje -->
@@ -52,7 +53,7 @@ export async function sendOtpEmail({ toEmail, otpCode }: SendOtpEmailParams): Pr
 
           <!-- Caja del Código de 4 Dígitos -->
           <div style="border: 2px solid #60a5fa; border-radius: 16px; background-color: #f8fafc; padding: 24px 12px; text-align: center; margin-bottom: 24px;">
-            <span style="font-size: 42px; font-weight: 800; color: #3b82f6; letter-spacing: 16px; font-family: monospace; display: inline-block;">
+            <span style="font-size: 42px; font-weight: 800; color: #3b82f6; letter-spacing: 14px; font-family: monospace; display: inline-block;">
               ${formattedCode}
             </span>
           </div>

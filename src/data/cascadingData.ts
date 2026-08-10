@@ -26,8 +26,7 @@ export const NIVELES_POR_MODALIDAD: Record<ModalidadKey, NivelOption[]> = {
     { value: 'EBA_AVANZADO', label: 'Avanzado' },
   ],
   EBE: [
-    { value: 'INICIAL', label: 'Inicial' },
-    { value: 'PRIMARIA', label: 'Primaria' },
+    { value: 'NO_APLICA', label: 'EBE' },
   ],
   CETPRO: [
     { value: 'CETPRO_TECNICO', label: 'ETP - Ciclo Técnico y Ciclo Auxiliar Técnico' },
@@ -36,13 +35,20 @@ export const NIVELES_POR_MODALIDAD: Record<ModalidadKey, NivelOption[]> = {
 
 export const AREAS_POR_MODALIDAD_NIVEL: Record<ModalidadKey, Record<string, string[]>> = {
   EBR: {
-    INICIAL: [], // Bloqueado / No disponible (—)
+    INICIAL: [
+      'Habilidades Generales',
+      'Conocimiento Curriculares y Pedagógicos',
+    ],
     PRIMARIA: [
+      'Habilidades Generales',
+      'Conocimiento Curriculares y Pedagógicos',
       'Primaria',
       'Educación Física',
       'Innovación Pedagógica',
     ],
     SECUNDARIA: [
+      'Habilidades Generales',
+      'Conocimiento Curriculares y Pedagógicos',
       'Comunicación',
       'Matemática',
       'Ciencia y Tecnología',
@@ -57,8 +63,13 @@ export const AREAS_POR_MODALIDAD_NIVEL: Record<ModalidadKey, Record<string, stri
     ],
   },
   EBA: {
-    EBA_INICIAL_INTERMEDIO: [], // Bloqueado / No disponible (—)
+    EBA_INICIAL_INTERMEDIO: [
+      'Habilidades Generales',
+      'Conocimiento Curriculares y Pedagógicos',
+    ],
     EBA_AVANZADO: [
+      'Habilidades Generales',
+      'Conocimiento Curriculares y Pedagógicos',
       'Comunicación',
       'Matemática',
       'Ciencia, Tecnología y Salud',
@@ -69,11 +80,16 @@ export const AREAS_POR_MODALIDAD_NIVEL: Record<ModalidadKey, Record<string, stri
     ],
   },
   EBE: {
-    INICIAL: [], // Bloqueado / No disponible (—)
-    PRIMARIA: [], // Bloqueado / No disponible (—)
+    NO_APLICA: [
+      'Habilidades Generales',
+      'Conocimiento Curriculares y Pedagógicos',
+    ],
   },
   CETPRO: {
-    CETPRO_TECNICO: [], // Bloqueado / No disponible (—)
+    CETPRO_TECNICO: [
+      'Habilidades Generales',
+      'Conocimiento Curriculares y Pedagógicos',
+    ],
   },
 };
 
@@ -97,4 +113,29 @@ export function getAreasDisponibles(modalidad?: string, nivel?: string): string[
   const modKey = modalidad as ModalidadKey;
   if (!AREAS_POR_MODALIDAD_NIVEL[modKey]) return [];
   return AREAS_POR_MODALIDAD_NIVEL[modKey][nivel] || [];
+}
+
+/**
+ * Formatea un acceso completo para mostrar en badges y tablas de control SaaS
+ * Ejemplo: "EBA - Avanzado - Comunicación" o "EBR - Inicial" (evitando guiones '—' sueltos)
+ */
+export function formatAccessBadge(modalidad: string, nivelValue: string, areaName?: string): string {
+  if (modalidad === 'EBE' || nivelValue === 'NO_APLICA') {
+    return 'EBE';
+  }
+
+  const modKey = modalidad as ModalidadKey;
+  const list = NIVELES_POR_MODALIDAD[modKey] || [];
+  const nivelObj = list.find((n) => n.value === nivelValue);
+  const nivelLabel = nivelObj ? nivelObj.label : nivelValue;
+
+  if (!areaName || areaName === '—' || areaName.trim() === '') {
+    return `${modalidad} - ${nivelLabel}`;
+  }
+
+  if (areaName.startsWith(modalidad) || areaName.includes(' - ')) {
+    return areaName;
+  }
+
+  return `${modalidad} - ${nivelLabel} - ${areaName}`;
 }

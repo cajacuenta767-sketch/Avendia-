@@ -335,7 +335,7 @@ export const CuadernillosView: React.FC = () => {
       {/* Modal Crear / Editar en Panel Administrador */}
       {modalState.isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4 max-h-[85vh] overflow-y-auto custom-scrollbar">
             <h2 className="text-lg font-black text-slate-900 dark:text-white">
               {modalState.mode === 'CREATE' ? '➕ Agregar Nuevo Cuadernillo' : '✏️ Editar Cuadernillo'}
             </h2>

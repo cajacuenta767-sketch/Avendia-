@@ -31,9 +31,29 @@ export const Navbar: React.FC = () => {
     fechaFin?: string;
   } | null>(null);
 
+  const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
+
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const checkSession = () => {
+    let currentAdmin = false;
+    try {
+      const adminRaw = typeof window !== 'undefined' ? (localStorage.getItem('admin_auth_session') || sessionStorage.getItem('admin_auth_session')) : null;
+      if (adminRaw) {
+        const parsedAdmin = JSON.parse(adminRaw);
+        if (parsedAdmin && (parsedAdmin.name || parsedAdmin.role || parsedAdmin.token || parsedAdmin.isAuthenticated)) {
+          currentAdmin = true;
+          setIsAdminLoggedIn(true);
+        } else {
+          setIsAdminLoggedIn(false);
+        }
+      } else {
+        setIsAdminLoggedIn(false);
+      }
+    } catch {
+      setIsAdminLoggedIn(false);
+    }
+
     try {
       const raw = localStorage.getItem('docente_session');
       if (raw) {
@@ -43,9 +63,28 @@ export const Navbar: React.FC = () => {
           return;
         }
       }
-      setDocenteSession(null);
+
+      if (currentAdmin) {
+        setDocenteSession({
+          id: 'admin-preview-session',
+          nombre: 'Administrador',
+          email: 'admin@avendescala.pe',
+          fechaFin: '2099-12-31',
+        });
+      } else {
+        setDocenteSession(null);
+      }
     } catch {
-      setDocenteSession(null);
+      if (currentAdmin) {
+        setDocenteSession({
+          id: 'admin-preview-session',
+          nombre: 'Administrador',
+          email: 'admin@avendescala.pe',
+          fechaFin: '2099-12-31',
+        });
+      } else {
+        setDocenteSession(null);
+      }
     }
   };
 
@@ -55,9 +94,11 @@ export const Navbar: React.FC = () => {
 
     window.addEventListener('storage', checkSession);
     window.addEventListener('docente_session_change', checkSession);
+    window.addEventListener('admin_session_change', checkSession);
     return () => {
       window.removeEventListener('storage', checkSession);
       window.removeEventListener('docente_session_change', checkSession);
+      window.removeEventListener('admin_session_change', checkSession);
     };
   }, []);
 
@@ -72,7 +113,7 @@ export const Navbar: React.FC = () => {
   }, []);
 
   const handleNavClick = (e: React.MouseEvent, targetPath: string) => {
-    if (!docenteSession) {
+    if (!docenteSession && !isAdminLoggedIn) {
       e.preventDefault();
       if (pathname === '/') {
         const loginEl = document.getElementById('login-form');
@@ -87,10 +128,14 @@ export const Navbar: React.FC = () => {
 
   const handleLogout = () => {
     localStorage.removeItem('docente_session');
+    localStorage.removeItem('admin_auth_session');
+    sessionStorage.removeItem('admin_auth_session');
     setDocenteSession(null);
+    setIsAdminLoggedIn(false);
     setProfileDropdownOpen(false);
     window.dispatchEvent(new Event('docente_session_change'));
-    router.push('/');
+    window.dispatchEvent(new Event('admin_session_change'));
+    window.location.href = '/';
   };
 
   const isHomePage = pathname === '/';
@@ -140,46 +185,34 @@ export const Navbar: React.FC = () => {
         {/* Logo oficial */}
         <Logo />
 
-        {/* Navegación Desktop Restringida -> Dirige al Formulario Unico del Inicio */}
+        {/* Navegación Desktop Restringida -> Visibilidad condicionada a docenteSession o rol Admin */}
         <nav className="hidden md:flex items-center space-x-2">
-          <Link
-            href="/cuadernillos"
-            onClick={(e) => handleNavClick(e, '/cuadernillos')}
-            className="px-3.5 py-2 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center space-x-2 cursor-pointer"
-          >
-            <svg className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-            </svg>
-            <span>Banco de Cuadernillos</span>
-          </Link>
-
-          <Link
-            href="/recursos"
-            onClick={(e) => handleNavClick(e, '/recursos')}
-            className="px-3.5 py-2 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center space-x-2 cursor-pointer"
-          >
-            <svg className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-            </svg>
-            <span>Recursos Didácticos</span>
-          </Link>
-
-          {/* ESTADO Y ACCIONES DE USUARIO */}
-          {mounted && !isHomePage && (
+          {docenteSession || isAdminLoggedIn ? (
             <>
-              {!docenteSession ? (
-                <button
-                  type="button"
-                  onClick={() => router.push('/#login-form')}
-                  className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 transition-colors flex items-center space-x-2 shadow-2xs cursor-pointer"
-                >
-                  <svg className="w-4 h-4 text-white shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
-                  </svg>
-                  <span>Iniciar Sesión</span>
-                </button>
-              ) : (
-                /* DROPDOWN ESTILIZADO DE USUARIO */
+              <Link
+                href="/cuadernillos"
+                onClick={(e) => handleNavClick(e, '/cuadernillos')}
+                className="px-3.5 py-2 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center space-x-2 cursor-pointer"
+              >
+                <svg className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                </svg>
+                <span>Banco de Cuadernillos</span>
+              </Link>
+
+              <Link
+                href="/recursos"
+                onClick={(e) => handleNavClick(e, '/recursos')}
+                className="px-3.5 py-2 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center space-x-2 cursor-pointer"
+              >
+                <svg className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                </svg>
+                <span>Recursos Didácticos</span>
+              </Link>
+
+              {/* DROPDOWN ESTILIZADO DE USUARIO SI HAY DOCENTESESSION */}
+              {docenteSession && (
                 <div className="relative ml-2" ref={dropdownRef}>
                   <button
                     type="button"
@@ -190,8 +223,8 @@ export const Navbar: React.FC = () => {
                       {getInitials(docenteSession.nombre)}
                     </div>
 
-                    <span className="bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full">
-                      SUSCRIPCIÓN PREMIUM
+                    <span className={isAdminLoggedIn ? "bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full" : "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full"}>
+                      {isAdminLoggedIn ? 'ADMIN' : 'SUSCRIPCIÓN PREMIUM'}
                     </span>
 
                     <svg className={`w-3.5 h-3.5 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-200 transition-transform duration-200 ${profileDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -212,17 +245,33 @@ export const Navbar: React.FC = () => {
                         </p>
 
                         <div className="pt-1">
-                          <span className="inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                            <svg className="w-3 h-3 text-emerald-600 dark:text-emerald-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <span className={isAdminLoggedIn ? "inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-900 border border-amber-300" : "inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"}>
+                            <svg className="w-3 h-3 text-amber-600 dark:text-amber-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                             </svg>
-                            <span>SUSCRIPCIÓN PREMIUM</span>
+                            <span>{isAdminLoggedIn ? 'ROL ADMINISTRADOR' : 'SUSCRIPCIÓN PREMIUM'}</span>
                           </span>
                         </div>
                       </div>
 
                       {/* Acciones de Cuenta */}
                       <div className="space-y-0.5">
+                        {isAdminLoggedIn && (
+                          <>
+                            <Link
+                              href="/admin"
+                              onClick={() => setProfileDropdownOpen(false)}
+                              className="w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-bold text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-slate-800 transition-colors text-left group cursor-pointer"
+                            >
+                              <svg className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                              </svg>
+                              <span>Ver como administrador</span>
+                            </Link>
+                            <div className="h-px bg-slate-100 dark:bg-slate-800 my-1" />
+                          </>
+                        )}
+
                         <button
                           type="button"
                           onClick={() => {
@@ -255,6 +304,26 @@ export const Navbar: React.FC = () => {
                 </div>
               )}
             </>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                if (pathname === '/') {
+                  const loginEl = document.getElementById('login-form');
+                  if (loginEl) {
+                    loginEl.scrollIntoView({ behavior: 'smooth' });
+                    return;
+                  }
+                }
+                router.push('/#login-form');
+              }}
+              className="px-5 py-2.5 rounded-xl text-xs font-extrabold text-white bg-blue-600 hover:bg-blue-700 transition-colors flex items-center space-x-2 shadow-xs cursor-pointer"
+            >
+              <svg className="w-4 h-4 text-white shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+              </svg>
+              <span>Iniciar Sesión</span>
+            </button>
           )}
         </nav>
 
@@ -278,82 +347,110 @@ export const Navbar: React.FC = () => {
       {/* MENÚ MÓVIL DESPLEGABLE (< md) */}
       {mobileMenuOpen && (
         <div className="md:hidden bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 p-4 space-y-3 shadow-xl animate-in fade-in slide-in-from-top-2 duration-150">
-          <div className="space-y-1">
-            <Link
-              href="/cuadernillos"
-              onClick={(e) => {
-                setMobileMenuOpen(false);
-                handleNavClick(e, '/cuadernillos');
-              }}
-              className="w-full flex items-center space-x-3 px-3.5 py-3 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-            >
-              <svg className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-              </svg>
-              <span>Banco de Cuadernillos</span>
-            </Link>
-
-            <Link
-              href="/recursos"
-              onClick={(e) => {
-                setMobileMenuOpen(false);
-                handleNavClick(e, '/recursos');
-              }}
-              className="w-full flex items-center space-x-3 px-3.5 py-3 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-            >
-              <svg className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-              </svg>
-              <span>Recursos Didácticos</span>
-            </Link>
-          </div>
-
-          {docenteSession ? (
-            <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2">
-              <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-black text-slate-900 dark:text-white truncate">{docenteSession.nombre}</p>
-                  <p className="text-[10px] text-slate-500 font-mono truncate">{docenteSession.email}</p>
-                </div>
-                <span className="text-[9px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 shrink-0">
-                  PREMIUM
-                </span>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMobileMenuOpen(false);
-                    setIsPerfilModalOpen(true);
-                  }}
-                  className="w-full py-2.5 px-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl transition-colors text-center cursor-pointer"
-                >
-                  Mi Perfil
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMobileMenuOpen(false);
-                    handleLogout();
-                  }}
-                  className="w-full py-2.5 px-3 bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold text-xs rounded-xl transition-colors text-center cursor-pointer"
-                >
-                  Cerrar Sesión
-                </button>
-              </div>
+          {/* Botón Ver como Administrador en Menú Móvil */}
+          {isAdminLoggedIn && (
+            <div className="pb-2 border-b border-slate-100 dark:border-slate-800">
+              <Link
+                href="/admin"
+                onClick={() => setMobileMenuOpen(false)}
+                className="w-full py-2.5 px-3.5 bg-amber-50 dark:bg-slate-800 hover:bg-amber-100 dark:hover:bg-slate-700 text-amber-900 dark:text-amber-300 border border-amber-200 dark:border-amber-800 font-extrabold text-xs rounded-xl shadow-2xs transition-colors text-center cursor-pointer flex items-center justify-center space-x-2"
+              >
+                <svg className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                </svg>
+                <span>Ver como administrador</span>
+              </Link>
             </div>
+          )}          {docenteSession ? (
+            <>
+              {/* Módulos Internos Visibles Únicamente con Sesión Activa */}
+              <div className="space-y-1">
+                <Link
+                  href="/cuadernillos"
+                  onClick={(e) => {
+                    setMobileMenuOpen(false);
+                    handleNavClick(e, '/cuadernillos');
+                  }}
+                  className="w-full flex items-center space-x-3 px-3.5 py-3 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                >
+                  <svg className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                  </svg>
+                  <span>Banco de Cuadernillos</span>
+                </Link>
+
+                <Link
+                  href="/recursos"
+                  onClick={(e) => {
+                    setMobileMenuOpen(false);
+                    handleNavClick(e, '/recursos');
+                  }}
+                  className="w-full flex items-center space-x-3 px-3.5 py-3 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                >
+                  <svg className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                  </svg>
+                  <span>Recursos Didácticos</span>
+                </Link>
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2">
+                <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-black text-slate-900 dark:text-white truncate">{docenteSession.nombre}</p>
+                    <p className="text-[10px] text-slate-500 font-mono truncate">{docenteSession.email}</p>
+                  </div>
+                  <span className={isAdminLoggedIn ? "text-[9px] font-black px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 shrink-0" : "text-[9px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 shrink-0"}>
+                    {isAdminLoggedIn ? 'ADMIN' : 'PREMIUM'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMobileMenuOpen(false);
+                      setIsPerfilModalOpen(true);
+                    }}
+                    className="w-full py-2.5 px-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl transition-colors text-center cursor-pointer"
+                  >
+                    Mi Perfil
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMobileMenuOpen(false);
+                      handleLogout();
+                    }}
+                    className="w-full py-2.5 px-3 bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold text-xs rounded-xl transition-colors text-center cursor-pointer"
+                  >
+                    Cerrar Sesión
+                  </button>
+                </div>
+              </div>
+            </>
           ) : (
-            <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+            /* Vista Pública sin Sesión: Solo Botón Principal de Iniciar Sesión */
+            <div className="py-2">
               <button
                 type="button"
                 onClick={() => {
                   setMobileMenuOpen(false);
+                  if (pathname === '/') {
+                    const loginEl = document.getElementById('login-form');
+                    if (loginEl) {
+                      loginEl.scrollIntoView({ behavior: 'smooth' });
+                      return;
+                    }
+                  }
                   router.push('/#login-form');
                 }}
-                className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors text-center cursor-pointer"
+                className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-md transition-colors text-center cursor-pointer flex items-center justify-center space-x-2"
               >
-                Iniciar Sesión
+                <svg className="w-4 h-4 text-white shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+                </svg>
+                <span>Iniciar Sesión</span>
               </button>
             </div>
           )}

@@ -111,6 +111,9 @@ export async function createEvaluacionAction(data: {
   origenCuadernillo?: string;
   origenResolucion?: string;
   origenClaves?: string;
+  codigoCuadernillo?: string;
+  codigoResolucion?: string;
+  codigoClaves?: string;
   esPremium?: boolean;
 }): Promise<ActionResponse<{ id: string }>> {
   try {
@@ -137,6 +140,9 @@ export async function createEvaluacionAction(data: {
         origenCuadernillo: data.origenCuadernillo || 'MINEDU',
         origenResolucion: data.origenResolucion || 'AVEND',
         origenClaves: data.origenClaves || 'MINEDU',
+        codigoCuadernillo: data.codigoCuadernillo || null,
+        codigoResolucion: data.codigoResolucion || null,
+        codigoClaves: data.codigoClaves || null,
         esPremium: Boolean(data.esPremium),
       },
     });
@@ -197,6 +203,9 @@ export async function getEvaluacionesAction(
           origenCuadernillo: true,
           origenResolucion: true,
           origenClaves: true,
+          codigoCuadernillo: true,
+          codigoResolucion: true,
+          codigoClaves: true,
           esPremium: true,
           createdAt: true,
         },
@@ -216,6 +225,9 @@ export async function getEvaluacionesAction(
           nivel: item.nivel as NivelEducativo,
           especialidad: item.area,
           especialidadLabel: labelLimpia,
+          codigoCuadernillo: item.codigoCuadernillo || undefined,
+          codigoResolucion: item.codigoResolucion || undefined,
+          codigoClaves: item.codigoClaves || undefined,
           anio: Number(item.anio) || 2024,
           isLatest: true,
           resources: {
@@ -225,6 +237,9 @@ export async function getEvaluacionesAction(
             origenCuadernillo: item.origenCuadernillo || 'MINEDU',
             origenResolucion: item.origenResolucion || 'AVEND',
             origenClaves: item.origenClaves || 'MINEDU',
+            codigoCuadernillo: item.codigoCuadernillo || undefined,
+            codigoResolucion: item.codigoResolucion || undefined,
+            codigoClaves: item.codigoClaves || undefined,
           },
           createdAt: item.createdAt.toISOString(),
           updatedAt: item.createdAt.toISOString(),
@@ -258,7 +273,26 @@ export async function getEvaluacionesAction(
     const areaTarget = filters.especialidad || filters.searchQuery;
     if (areaTarget && areaTarget !== 'TODOS' && areaTarget !== '—' && areaTarget.trim()) {
       const targetLower = areaTarget.trim().toLowerCase();
-      filteredList = filteredList.filter((e) => e.especialidad && e.especialidad.toLowerCase().includes(targetLower));
+      filteredList = filteredList.filter((e) => {
+        if (!e.especialidad && !e.titulo) return false;
+        const espLower = (e.especialidad || '').toLowerCase();
+        const titleLower = (e.titulo || '').toLowerCase();
+
+        if (filters.proceso === 'NOMBRAMIENTO_DOCENTE') {
+          const isHg =
+            espLower.includes('habilidades generales') ||
+            espLower.includes('general') ||
+            titleLower.includes('habilidades generales') ||
+            titleLower.includes('comprensión lectora') ||
+            titleLower.includes('razonamiento lógico') ||
+            titleLower.includes('subprueba 1') ||
+            titleLower.includes('subprueba 2');
+
+          if (isHg) return true;
+        }
+
+        return espLower.includes(targetLower) || titleLower.includes(targetLower);
+      });
     }
     if (filters.anio && filters.anio !== 'TODOS') {
       filteredList = filteredList.filter((e) => String(e.anio) === String(filters.anio));

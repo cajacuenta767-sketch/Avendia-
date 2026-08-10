@@ -21,7 +21,8 @@ export default function RecursosPage() {
   // Guard de Navegación Estricta
   useEffect(() => {
     const sessionStr = localStorage.getItem('docente_session');
-    if (!sessionStr) {
+    const adminSessionStr = localStorage.getItem('admin_auth_session') || sessionStorage.getItem('admin_auth_session');
+    if (!sessionStr && !adminSessionStr) {
       router.replace('/');
     }
   }, [router]);
@@ -87,7 +88,8 @@ export default function RecursosPage() {
 
   const handleOpenPdf = (recurso: Recurso) => {
     const session = localStorage.getItem('docente_session');
-    if (!session) {
+    const adminSession = localStorage.getItem('admin_auth_session') || sessionStorage.getItem('admin_auth_session');
+    if (!session && !adminSession) {
       router.push('/#login-form');
       return;
     }

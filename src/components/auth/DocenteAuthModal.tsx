@@ -4,29 +4,29 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { loginDocenteAction, registrarseDocenteAction } from '@/services/usuariosService';
+import { checkIsAdminEmailAction } from '@/services/adminService';
 
 interface DocenteAuthModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess: (docente: { id?: string; nombre: string; email: string; fechaFin?: string }) => void;
+  onSuccess: (data: any) => void;
 }
 
-export const DocenteAuthModal: React.FC<DocenteAuthModalProps> = ({
-  isOpen,
-  onClose,
-  onSuccess,
-}) => {
+export const DocenteAuthModal: React.FC<DocenteAuthModalProps> = ({ isOpen, onClose, onSuccess }) => {
   const [mounted, setMounted] = useState(false);
   const [mode, setMode] = useState<'login' | 'register'>('login');
 
-  // Form State Login
+  // Formulario Login
   const [emailLogin, setEmailLogin] = useState('');
   const [pinLogin, setPinLogin] = useState('');
 
-  // Form State Register
+  // Formulario Registro
   const [nombreReg, setNombreReg] = useState('');
   const [emailReg, setEmailReg] = useState('');
   const [pinReg, setPinReg] = useState('');
+  const [modalidadReg, setModalidadReg] = useState('EBR');
+  const [nivelReg, setNivelReg] = useState('INICIAL');
+  const [areaReg, setAreaReg] = useState('');
 
   const [errorMessage, setErrorMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -46,6 +46,14 @@ export const DocenteAuthModal: React.FC<DocenteAuthModalProps> = ({
     setIsLoading(false);
 
     if (res.success) {
+      if (res.data.isAdmin) {
+        localStorage.removeItem('admin_auth_session');
+        sessionStorage.removeItem('admin_auth_session');
+        onClose();
+        window.location.href = `/admin?email=${encodeURIComponent(res.data.email)}`;
+        return;
+      }
+
       const docenteData = {
         id: res.data.id,
         nombre: res.data.nombre,

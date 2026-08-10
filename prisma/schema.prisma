@@ -197,19 +197,22 @@ model Recurso {
 }
 
 model Evaluacion {
-  id             String   @id @default(cuid())
-  titulo         String   @default("Evaluación MINEDU")
-  proceso        String
-  modalidad      String
-  nivel          String
-  area           String
-  anio           String
+  id                String   @id @default(cuid())
+  titulo            String   @default("Evaluación MINEDU")
+  proceso           String
+  modalidad         String
+  nivel             String
+  area              String
+  anio              String
   urlCuadernillo    String?
   urlResolucion     String?
   urlClaves         String?
   origenCuadernillo String?  @default("MINEDU")
   origenResolucion  String?  @default("AVEND")
   origenClaves      String?  @default("MINEDU")
+  codigoCuadernillo String?
+  codigoResolucion  String?
+  codigoClaves      String?
   esPremium         Boolean  @default(false)
   createdAt         DateTime @default(now())
 
@@ -233,6 +236,7 @@ model UsuarioDocente {
   modalidad     String?  @default("EBR")
   nivel         String?  @default("INICIAL")
   areas         String?  @default("[]")
+  tiposAcceso   String?  @default("[\"Ascenso\",\"Nombramiento\",\"Directivo\"]")
   creadoPor     String?  @default("Juan Avend")
   modificadoPor String?  @default("Juan Avend")
   fechaInicio   DateTime @default(now())
@@ -241,4 +245,24 @@ model UsuarioDocente {
   updatedAt     DateTime @updatedAt
 
   @@map("usuarios_docentes")
+}
+
+model AdminUser {
+  id                  String   @id @default(cuid())
+  nombre              String
+  email               String   @unique
+  usuario             String   @unique
+  password            String
+  rol                 String   @default("ADMINISTRADOR")
+  estado              String   @default("ACTIVO")
+  permisoUsuarios     Boolean  @default(true)
+  permisoCuadernillos Boolean  @default(true)
+  permisoRecursos     Boolean  @default(true)
+  permisoMetricas     Boolean  @default(true)
+  creadoPor           String?  @default("Juan Avend")
+  modificadoPor       String?  @default("Juan Avend")
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@map("admin_users")
 }

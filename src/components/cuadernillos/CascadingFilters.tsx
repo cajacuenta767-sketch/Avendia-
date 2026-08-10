@@ -238,18 +238,25 @@ export const CascadingFilters: React.FC<CascadingFiltersProps> = ({
               Nivel
             </label>
             <select
-              value={filters.nivel && filters.nivel !== 'TODOS' ? filters.nivel : ''}
+              value={filters.modalidad === 'EBE' ? '—' : filters.nivel && filters.nivel !== 'TODOS' ? filters.nivel : ''}
               onChange={(e) => handleNivelChange(e.target.value)}
-              className="w-full h-10 px-3 rounded-xl border border-gray-200 dark:border-slate-800 bg-gray-50/50 dark:bg-slate-800 text-gray-900 dark:text-white text-xs font-bold focus:outline-none transition-all cursor-pointer"
+              disabled={filters.modalidad === 'EBE'}
+              className="w-full h-10 px-3 rounded-xl border border-gray-200 dark:border-slate-800 bg-gray-50/50 dark:bg-slate-800 text-gray-900 dark:text-white text-xs font-bold focus:outline-none transition-all cursor-pointer disabled:opacity-80 disabled:cursor-not-allowed"
             >
-              <option value="" disabled hidden className="text-gray-400">
-                Selecciona tu nivel
-              </option>
-              {nivelesDisponibles.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
+              {filters.modalidad === 'EBE' ? (
+                <option value="—">—</option>
+              ) : (
+                <>
+                  <option value="" disabled hidden className="text-gray-400">
+                    Selecciona tu nivel
+                  </option>
+                  {nivelesDisponibles.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </>
+              )}
             </select>
           </div>
         )}
@@ -261,30 +268,32 @@ export const CascadingFilters: React.FC<CascadingFiltersProps> = ({
           </label>
           <select
             value={
-              !isDirectivos && currentNivel && especialidadesDisponibles.length === 0
+              filters.modalidad === 'EBE' || (!isDirectivos && currentNivel && especialidadesDisponibles.length === 0)
                 ? '—'
                 : filters.especialidad && filters.especialidad !== 'TODOS'
                 ? filters.especialidad
                 : ''
             }
             onChange={(e) => handleEspecialidadChange(e.target.value)}
-            disabled={!isDirectivos && !!currentNivel && especialidadesDisponibles.length === 0}
+            disabled={filters.modalidad === 'EBE' || (!isDirectivos && !!currentNivel && especialidadesDisponibles.length === 0)}
             className="w-full h-10 px-3 rounded-xl border border-gray-200 dark:border-slate-800 bg-gray-50/50 dark:bg-slate-800 text-gray-900 dark:text-white text-xs font-bold focus:outline-none transition-all cursor-pointer disabled:opacity-80 disabled:cursor-not-allowed"
           >
-            <option value="" disabled hidden className="text-gray-400">
-              {isDirectivos ? 'Selecciona tu cargo' : 'Selecciona una especialidad'}
-            </option>
-            {!isDirectivos && currentNivel && especialidadesDisponibles.length === 0 ? (
+            {filters.modalidad === 'EBE' || (!isDirectivos && currentNivel && especialidadesDisponibles.length === 0) ? (
               <option value="—">—</option>
             ) : (
-              especialidadesDisponibles.map((opt) => {
-                const itemVal = typeof opt === 'string' ? opt : (opt as any).label || (opt as any).value;
-                return (
-                  <option key={itemVal} value={itemVal}>
-                    {itemVal}
-                  </option>
-                );
-              })
+              <>
+                <option value="" disabled hidden className="text-gray-400">
+                  {isDirectivos ? 'Selecciona tu cargo' : 'Selecciona una especialidad'}
+                </option>
+                {especialidadesDisponibles.map((opt) => {
+                  const itemVal = typeof opt === 'string' ? opt : (opt as any).label || (opt as any).value;
+                  return (
+                    <option key={itemVal} value={itemVal}>
+                      {itemVal}
+                    </option>
+                  );
+                })}
+              </>
             )}
           </select>
         </div>

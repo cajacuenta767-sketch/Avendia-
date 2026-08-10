@@ -16,6 +16,7 @@ export interface UsuarioDocenteItem {
   modalidad?: string;
   nivel?: string;
   areas?: string[];
+  tiposAcceso?: string[];
   creadoPor?: string;
   modificadoPor?: string;
   fechaInicio: string;
@@ -72,6 +73,15 @@ export async function getUsuariosAction(): Promise<ActionResponse<UsuarioDocente
         parsedAreas = [];
       }
 
+      let parsedTiposAcceso: string[] = ['Ascenso', 'Nombramiento', 'Directivo'];
+      try {
+        if (u.tiposAcceso) {
+          parsedTiposAcceso = JSON.parse(u.tiposAcceso);
+        }
+      } catch {
+        parsedTiposAcceso = ['Ascenso', 'Nombramiento', 'Directivo'];
+      }
+
       return {
         id: u.id,
         dni: u.dni,
@@ -82,6 +92,7 @@ export async function getUsuariosAction(): Promise<ActionResponse<UsuarioDocente
         modalidad: u.modalidad || 'EBR',
         nivel: u.nivel || 'INICIAL',
         areas: parsedAreas,
+        tiposAcceso: parsedTiposAcceso,
         creadoPor: u.creadoPor || 'Juan Avend',
         modificadoPor: u.modificadoPor || u.creadoPor || 'Juan Avend',
         fechaInicio: formatDateTimePE(u.fechaInicio),
@@ -105,14 +116,34 @@ export async function getUsuariosAction(): Promise<ActionResponse<UsuarioDocente
   }
 }
 
+function parseToDateObj(dateStr?: string, fallback: Date = new Date()): Date {
+  if (!dateStr || !dateStr.trim()) return fallback;
+  try {
+    if (dateStr.includes('/')) {
+      const parts = dateStr.split(' - ');
+      const [d, m, y] = parts[0].split('/');
+      if (d && m && y) {
+        const parsed = new Date(`${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}T00:00:00`);
+        if (!isNaN(parsed.getTime())) return parsed;
+      }
+    }
+    const cleanStr = dateStr.includes('T') ? dateStr : dateStr + 'T00:00:00';
+    const parsed = new Date(cleanStr);
+    if (!isNaN(parsed.getTime())) return parsed;
+  } catch {}
+  return fallback;
+}
+
 export async function createUsuarioAction(data: {
   nombre: string;
   email: string;
   modalidad?: string;
   nivel?: string;
   areas?: string[];
+  tiposAcceso?: string[];
   creadoPor?: string;
   pin?: string;
+  fechaInicio?: string;
   fechaFin?: string;
 }): Promise<ActionResponse<UsuarioDocenteItem>> {
   try {
@@ -128,14 +159,16 @@ export async function createUsuarioAction(data: {
     const nivelVal = data.nivel || 'INICIAL';
     const areasArr = data.areas || [];
     const areasJson = JSON.stringify(areasArr);
+    const tiposAccesoArr = data.tiposAcceso || ['Ascenso', 'Nombramiento', 'Directivo'];
+    const tiposAccesoJson = JSON.stringify(tiposAccesoArr);
     const adminResponsable = data.creadoPor || 'Juan Avend';
 
     if (!nombreTrimmed || !emailTrimmed) {
       return { success: false, error: { code: 'INVALID_FIELDS', message: 'Nombre y correo son obligatorios.' } };
     }
 
-    const fechaInicioObj = new Date();
-    const fechaFinObj = data.fechaFin ? new Date(data.fechaFin) : new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+    const fechaInicioObj = parseToDateObj(data.fechaInicio, new Date());
+    const fechaFinObj = parseToDateObj(data.fechaFin, new Date(Date.now() + 365 * 24 * 60 * 60 * 1000));
 
     const created = await prisma.usuarioDocente.create({
       data: {
@@ -147,6 +180,7 @@ export async function createUsuarioAction(data: {
         modalidad: modalidadVal,
         nivel: nivelVal,
         areas: areasJson,
+        tiposAcceso: tiposAccesoJson,
         creadoPor: adminResponsable,
         modificadoPor: adminResponsable,
         fechaInicio: fechaInicioObj,
@@ -168,6 +202,7 @@ export async function createUsuarioAction(data: {
         modalidad: created.modalidad || 'EBR',
         nivel: created.nivel || 'INICIAL',
         areas: areasArr,
+        tiposAcceso: tiposAccesoArr,
         creadoPor: created.creadoPor || adminResponsable,
         modificadoPor: created.modificadoPor || adminResponsable,
         fechaInicio: formatDateTimePE(created.fechaInicio),
@@ -237,12 +272,14 @@ export async function updateUsuarioAction(
   id: string,
   data: {
     pin?: string;
+    fechaInicio?: string;
     fechaFin?: string;
     nombre?: string;
     email?: string;
     modalidad?: string;
     nivel?: string;
     areas?: string[];
+    tiposAcceso?: string[];
     modificadoPor?: string;
   }
 ): Promise<ActionResponse<{ id: string }>> {
@@ -251,10 +288,12 @@ export async function updateUsuarioAction(
     if (data.pin) updatePayload.pin = data.pin.trim();
     if (data.nombre) updatePayload.nombre = data.nombre.trim();
     if (data.email) updatePayload.email = data.email.trim().toLowerCase();
-    if (data.fechaFin) updatePayload.fechaFin = new Date(data.fechaFin);
+    if (data.fechaInicio) updatePayload.fechaInicio = parseToDateObj(data.fechaInicio, new Date());
+    if (data.fechaFin) updatePayload.fechaFin = parseToDateObj(data.fechaFin, new Date(Date.now() + 365 * 24 * 60 * 60 * 1000));
     if (data.modalidad) updatePayload.modalidad = data.modalidad;
     if (data.nivel) updatePayload.nivel = data.nivel;
     if (data.areas) updatePayload.areas = JSON.stringify(data.areas);
+    if (data.tiposAcceso) updatePayload.tiposAcceso = JSON.stringify(data.tiposAcceso);
     if (data.modificadoPor) updatePayload.modificadoPor = data.modificadoPor;
 
     await prisma.usuarioDocente.update({
@@ -262,6 +301,7 @@ export async function updateUsuarioAction(
       data: updatePayload,
     });
 
+    invalidateUsuariosCache();
     revalidatePath('/admin');
     return { success: true, data: { id } };
   } catch (error: any) {
@@ -376,6 +416,8 @@ export async function actualizarLicenciaAction(
   return updateUsuarioAction(id, data) as any;
 }
 
+import { OFFICIAL_ADMIN_ACCOUNTS } from '@/data/adminAccounts';
+
 export async function solicitarCodigoOtpAction(
   email: string
 ): Promise<ActionResponse<{ email: string; isRealEmailSent: boolean; message: string }>> {
@@ -390,7 +432,18 @@ export async function solicitarCodigoOtpAction(
       where: { email: emailTerm },
     });
 
-    if (!user) {
+    const adminUser = await prisma.adminUser.findFirst({
+      where: { OR: [{ email: emailTerm }, { usuario: emailTerm }], estado: 'ACTIVO' },
+    });
+
+    const officialAdmin = OFFICIAL_ADMIN_ACCOUNTS.find(
+      (acc) => acc.userOrEmail.map((u) => u.toLowerCase()).includes(emailTerm)
+    );
+
+    const isAdmin = Boolean(adminUser || officialAdmin);
+    const nombreUsuario = adminUser?.nombre || officialAdmin?.name || user?.nombre;
+
+    if (!user && !isAdmin) {
       return {
         success: false,
         error: {
@@ -408,7 +461,7 @@ export async function solicitarCodigoOtpAction(
     const emailResult = await sendOtpEmail({
       toEmail: emailTerm,
       otpCode,
-      nombreDocente: user.nombre,
+      nombreDocente: nombreUsuario || 'Usuario',
     });
 
     if (emailResult.success) {
@@ -445,7 +498,7 @@ export async function solicitarCodigoOtpAction(
 export async function verificarCodigoOtpAction(
   email: string,
   codigoOtp: string
-): Promise<ActionResponse<{ id: string; nombre: string; email: string; modalidad?: string; nivel?: string; areas?: string[]; fechaFin: string }>> {
+): Promise<ActionResponse<{ id: string; nombre: string; email: string; modalidad?: string; nivel?: string; areas?: string[]; fechaFin: string; isAdmin?: boolean; token?: string; role?: string; permisoUsuarios?: boolean; permisoCuadernillos?: boolean; permisoRecursos?: boolean; permisoMetricas?: boolean }>> {
   try {
     const emailTerm = (email || '').trim().toLowerCase();
     const codeTrimmed = (codigoOtp || '').trim();
@@ -458,7 +511,17 @@ export async function verificarCodigoOtpAction(
       where: { email: emailTerm },
     });
 
-    if (!user) {
+    const adminUser = await prisma.adminUser.findFirst({
+      where: { OR: [{ email: emailTerm }, { usuario: emailTerm }], estado: 'ACTIVO' },
+    });
+
+    const officialAdmin = OFFICIAL_ADMIN_ACCOUNTS.find(
+      (acc) => acc.userOrEmail.map((u) => u.toLowerCase()).includes(emailTerm)
+    );
+
+    const isAdmin = Boolean(adminUser || officialAdmin);
+
+    if (!user && !isAdmin) {
       return {
         success: false,
         error: {
@@ -469,8 +532,10 @@ export async function verificarCodigoOtpAction(
     }
 
     const stored = otpStore.get(emailTerm);
+    const assignedPin = adminUser?.password || officialAdmin?.passOrPin?.[0];
     const isValidCode =
       codeTrimmed === '1234' ||
+      (assignedPin && codeTrimmed === assignedPin) ||
       (stored && stored.code === codeTrimmed && stored.expiresAt >= Date.now());
 
     if (!isValidCode) {
@@ -485,21 +550,44 @@ export async function verificarCodigoOtpAction(
 
     otpStore.delete(emailTerm);
 
+    if (isAdmin) {
+      const name = adminUser?.nombre || officialAdmin?.name || 'Administrador';
+      const role = adminUser?.rol || officialAdmin?.role || 'ADMINISTRADOR';
+      const token = `admin_session_${Date.now()}_${name.replace(/\s+/g, '_').toLowerCase()}`;
+
+      return {
+        success: true,
+        data: {
+          id: adminUser?.id || 'admin_id',
+          nombre: name,
+          email: emailTerm,
+          isAdmin: true,
+          token,
+          role,
+          permisoUsuarios: adminUser ? adminUser.permisoUsuarios : true,
+          permisoCuadernillos: adminUser ? adminUser.permisoCuadernillos : true,
+          permisoRecursos: adminUser ? adminUser.permisoRecursos : true,
+          permisoMetricas: adminUser ? adminUser.permisoMetricas : true,
+          fechaFin: 'Acceso Total Admin',
+        },
+      };
+    }
+
     let parsedAreas: string[] = [];
     try {
-      parsedAreas = user.areas ? JSON.parse(user.areas) : [];
+      parsedAreas = user!.areas ? JSON.parse(user!.areas) : [];
     } catch {}
 
     return {
       success: true,
       data: {
-        id: user.id,
-        nombre: user.nombre,
-        email: user.email,
-        modalidad: user.modalidad || 'EBR',
-        nivel: user.nivel || 'INICIAL',
+        id: user!.id,
+        nombre: user!.nombre,
+        email: user!.email,
+        modalidad: user!.modalidad || 'EBR',
+        nivel: user!.nivel || 'INICIAL',
         areas: parsedAreas,
-        fechaFin: formatDateTimePE(user.fechaFin),
+        fechaFin: formatDateTimePE(user!.fechaFin),
       },
     };
   } catch (error: any) {
@@ -517,7 +605,7 @@ export async function verificarCodigoOtpAction(
 export async function loginDocenteAction(
   identificador: string,
   pin: string
-): Promise<ActionResponse<{ id: string; nombre: string; email: string; fechaFin: string }>> {
+): Promise<ActionResponse<any>> {
   return verificarCodigoOtpAction(identificador, pin);
 }
 

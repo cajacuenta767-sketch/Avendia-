@@ -9,6 +9,10 @@ export interface UserFormData {
   modalidad: string;
   nivel: string;
   areas: string[];
+  duracionOption?: '1_year' | '1_month' | '6_months' | 'custom';
+  fechaInicio?: string;
+  fechaFin?: string;
+  tiposAcceso?: string[];
 }
 
 export interface UserFormModalProps {
@@ -17,58 +21,37 @@ export interface UserFormModalProps {
   onSubmit: (data: UserFormData) => void;
 }
 
-const MODALIDADES = [
-  { value: 'EBR', label: 'EBR' },
-  { value: 'EBA', label: 'EBA' },
-  { value: 'EBE', label: 'EBE' },
-  { value: 'CETPRO', label: 'CETPRO' },
-];
+import {
+  MODALIDADES_LIST,
+  NIVELES_POR_MODALIDAD as NIVELES_POR_MODALIDAD_DATA,
+  AREAS_POR_MODALIDAD_NIVEL,
+  ModalidadKey,
+  formatAccessBadge,
+} from '@/data/cascadingData';
 
-const NIVELES_POR_MODALIDAD: Record<string, { value: string; label: string }[]> = {
-  EBR: [
-    { value: 'INICIAL', label: 'Inicial' },
-    { value: 'PRIMARIA', label: 'Primaria' },
-    { value: 'SECUNDARIA', label: 'Secundaria' },
-  ],
-  EBA: [
-    { value: 'INICIAL', label: 'Ciclo Inicial e Intermedio' },
-    { value: 'SECUNDARIA', label: 'Ciclo Avanzado' },
-  ],
-  EBE: [
-    { value: 'INICIAL', label: 'Inicial EBE' },
-    { value: 'PRIMARIA', label: 'Primaria EBE' },
-  ],
-  CETPRO: [
-    { value: 'SECUNDARIA', label: 'Ciclo Técnico Productivo' },
-  ],
+const getTodayFormatted = () => {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 };
 
-const AREAS_POR_NIVEL: Record<string, string[]> = {
-  INICIAL: ['Educación Inicial', 'AIP / Aula de Innovación Pedagógica'],
-  PRIMARIA: ['Educación Primaria', 'Educación Física', 'AIP / Aula de Innovación Pedagógica'],
-  SECUNDARIA: [
-    'Matemática',
-    'Comunicación',
-    'Ciencia y Tecnología',
-    'Ciencias Sociales',
-    'Desarrollo Personal, Ciudadanía y Cívica (DPCC)',
-    'Educación Física',
-    'Inglés',
-    'Educación para el Trabajo (EPT)',
-    'Arte y Cultura',
-    'Educación Religiosa',
-    'AIP / Aula de Innovación Pedagógica',
-  ],
-  NO_APLICA: [
-    'Acceso a cargos directivos',
-    'Director de Institución Educativa',
-    'Subdirector de Institución Educativa',
-    'Especialista en Educación de UGEL',
-    'Especialista en Educación de DRE',
-    'Director de Gestión Pedagógica (DGP) de DRE',
-    'Jefe de Gestión Pedagógica (JAGP) de UGEL',
-    'Director de UGEL',
-  ],
+const calculateEndDate = (startDateStr: string, option: '1_year' | '1_month' | '6_months' | 'custom') => {
+  if (option === 'custom') return startDateStr;
+  const d = new Date(startDateStr + 'T00:00:00');
+  if (isNaN(d.getTime())) return startDateStr;
+  if (option === '1_year') {
+    d.setFullYear(d.getFullYear() + 1);
+  } else if (option === '1_month') {
+    d.setMonth(d.getMonth() + 1);
+  } else if (option === '6_months') {
+    d.setMonth(d.getMonth() + 6);
+  }
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 };
 
 export const UserFormModal: React.FC<UserFormModalProps> = ({
@@ -84,48 +67,120 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
   const [assignedAreas, setAssignedAreas] = useState<string[]>([]);
   const [errorMessage, setErrorMessage] = useState('');
 
+  // Suscripción y Tipo de Acceso
+  const [duracionOption, setDuracionOption] = useState<'1_year' | '1_month' | '6_months' | 'custom'>('6_months');
+  const [fechaInicio, setFechaInicio] = useState(getTodayFormatted());
+  const [fechaFin, setFechaFin] = useState(calculateEndDate(getTodayFormatted(), '6_months'));
+  const [tiposAcceso, setTiposAcceso] = useState<{ Ascenso: boolean; Nombramiento: boolean; Directivo: boolean }>({
+    Ascenso: true,
+    Nombramiento: true,
+    Directivo: true,
+  });
+
   // Niveles disponibles según la modalidad activa
   const nivelesDisponibles = useMemo(() => {
-    return NIVELES_POR_MODALIDAD[modalidad] || NIVELES_POR_MODALIDAD.EBR;
+    const list = NIVELES_POR_MODALIDAD_DATA[modalidad as ModalidadKey] || NIVELES_POR_MODALIDAD_DATA.EBR;
+    return list.map((item) => ({ value: item.value, label: item.label }));
   }, [modalidad]);
 
   // Áreas disponibles según el nivel activo
   const areasDisponibles = useMemo(() => {
-    return AREAS_POR_NIVEL[nivel] || AREAS_POR_NIVEL.INICIAL;
-  }, [nivel]);
+    const modObj = AREAS_POR_MODALIDAD_NIVEL[modalidad as ModalidadKey];
+    if (!modObj) return [];
+    return modObj[nivel] || [];
+  }, [modalidad, nivel]);
 
   if (!isOpen) return null;
 
   const handleModalidadChange = (nuevaMod: string) => {
     setModalidad(nuevaMod);
-    const primerNivel = (NIVELES_POR_MODALIDAD[nuevaMod] || NIVELES_POR_MODALIDAD.EBR)[0].value;
+    const list = NIVELES_POR_MODALIDAD_DATA[nuevaMod as ModalidadKey] || NIVELES_POR_MODALIDAD_DATA.EBR;
+    const primerNivel = list[0].value;
     setNivel(primerNivel);
-    const primerasAreas = AREAS_POR_NIVEL[primerNivel] || AREAS_POR_NIVEL.INICIAL;
-    setSelectedAreaInput(primerasAreas[0]);
-    setAssignedAreas([]);
+    const primerasAreas = AREAS_POR_MODALIDAD_NIVEL[nuevaMod as ModalidadKey]?.[primerNivel] || [];
+    setSelectedAreaInput(primerasAreas[0] || '—');
   };
 
   const handleNivelChange = (nuevoNivel: string) => {
     setNivel(nuevoNivel);
-    const primerasAreas = AREAS_POR_NIVEL[nuevoNivel] || AREAS_POR_NIVEL.INICIAL;
-    setSelectedAreaInput(primerasAreas[0]);
-    setAssignedAreas([]);
+    const primerasAreas = AREAS_POR_MODALIDAD_NIVEL[modalidad as ModalidadKey]?.[nuevoNivel] || [];
+    setSelectedAreaInput(primerasAreas[0] || '—');
   };
 
   const handleAgregarTodas = () => {
-    setAssignedAreas([...areasDisponibles]);
+    const modKey = modalidad as ModalidadKey;
+    const list = NIVELES_POR_MODALIDAD_DATA[modKey] || [];
+    const nivelObj = list.find((n) => n.value === nivel);
+    const nivelLabel = nivelObj ? nivelObj.label : nivel;
+
+    let targetBadge = '';
+    if (areasDisponibles.length === 0) {
+      targetBadge = formatAccessBadge(modalidad, nivel);
+    } else {
+      targetBadge = `${modalidad} - ${nivelLabel} - General`;
+    }
+
+    const prefixToClear = `${modalidad} - ${nivelLabel} - `;
+    const filtered = assignedAreas.filter((b) => !b.startsWith(prefixToClear));
+
+    if (!filtered.includes(targetBadge)) {
+      setAssignedAreas([...filtered, targetBadge]);
+    } else {
+      setAssignedAreas(filtered);
+    }
   };
 
   const handleAgregarIndividual = () => {
-    const areaToAdd = selectedAreaInput || areasDisponibles[0];
-    if (!areaToAdd) return;
-    if (!assignedAreas.includes(areaToAdd)) {
-      setAssignedAreas([...assignedAreas, areaToAdd]);
+    let badgeToAdd = '';
+    if (areasDisponibles.length === 0) {
+      badgeToAdd = formatAccessBadge(modalidad, nivel);
+    } else {
+      const areaSel = selectedAreaInput || areasDisponibles[0];
+      badgeToAdd = formatAccessBadge(modalidad, nivel, areaSel);
+    }
+    if (!badgeToAdd) return;
+    if (!assignedAreas.includes(badgeToAdd)) {
+      const nextAreas = [...assignedAreas, badgeToAdd];
+
+      const modKey = modalidad as ModalidadKey;
+      const list = NIVELES_POR_MODALIDAD_DATA[modKey] || [];
+      const nivelObj = list.find((n) => n.value === nivel);
+      const nivelLabel = nivelObj ? nivelObj.label : nivel;
+
+      if (areasDisponibles.length > 0) {
+        const expectedBadges = areasDisponibles.map((a) => formatAccessBadge(modalidad, nivel, a));
+        const hasAllIndividual = expectedBadges.every((b) => nextAreas.includes(b));
+        if (hasAllIndividual) {
+          const generalBadge = `${modalidad} - ${nivelLabel} - General`;
+          const filtered = nextAreas.filter((b) => !expectedBadges.includes(b));
+          if (!filtered.includes(generalBadge)) {
+            filtered.push(generalBadge);
+          }
+          setAssignedAreas(filtered);
+          return;
+        }
+      }
+
+      setAssignedAreas(nextAreas);
     }
   };
 
   const handleRemoverArea = (areaToRemove: string) => {
     setAssignedAreas(assignedAreas.filter((a) => a !== areaToRemove));
+  };
+
+  const handleDuracionOptionChange = (option: '1_year' | '1_month' | '6_months' | 'custom') => {
+    setDuracionOption(option);
+    if (option !== 'custom') {
+      setFechaFin(calculateEndDate(fechaInicio, option));
+    }
+  };
+
+  const handleFechaInicioChange = (val: string) => {
+    setFechaInicio(val);
+    if (duracionOption !== 'custom') {
+      setFechaFin(calculateEndDate(val, duracionOption));
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -142,12 +197,20 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
       return;
     }
 
+    const selectedTiposAcceso = Object.entries(tiposAcceso)
+      .filter(([_, val]) => val)
+      .map(([key]) => key);
+
     onSubmit({
       fullName: fullName.trim(),
       email: email.trim().toLowerCase(),
       modalidad,
       nivel,
       areas: assignedAreas.length > 0 ? assignedAreas : [areasDisponibles[0]],
+      duracionOption,
+      fechaInicio,
+      fechaFin,
+      tiposAcceso: selectedTiposAcceso,
     });
 
     setFullName('');
@@ -158,10 +221,10 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-200">
-      <div className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 sm:p-8 shadow-2xl overflow-hidden max-h-[92vh] overflow-y-auto">
+      <div className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
         
-        {/* Cabecera del Modal */}
-        <div className="flex items-start justify-between mb-4">
+        {/* Cabecera Fija del Modal */}
+        <div className="p-6 sm:px-8 sm:pt-6 sm:pb-4 border-b border-slate-100 dark:border-slate-800 shrink-0 flex items-start justify-between">
           <div className="space-y-0.5">
             <span className="text-[11px] font-black uppercase tracking-wider text-indigo-700 dark:text-indigo-400">
               NUEVO ACCESO
@@ -182,13 +245,15 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
           </button>
         </div>
 
-        {errorMessage && (
-          <div className="mb-4 p-3 rounded-xl bg-rose-50 border border-rose-100 text-rose-700 font-bold text-xs">
-            ⚠️ {errorMessage}
-          </div>
-        )}
+        {/* Formulario Scrollable Interno con Scrollbar Elegante Integrado */}
+        <div className="p-6 sm:p-8 overflow-y-auto custom-scrollbar flex-1 space-y-4">
+          {errorMessage && (
+            <div className="p-3 rounded-xl bg-rose-50 border border-rose-100 text-rose-700 font-bold text-xs">
+              ⚠️ {errorMessage}
+            </div>
+          )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4">
           {/* Campo: Nombre completo */}
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
@@ -230,7 +295,7 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
                 onChange={(e) => handleModalidadChange(e.target.value)}
                 className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-xs font-bold text-slate-900 dark:text-white outline-none focus:border-indigo-600 cursor-pointer"
               >
-                {MODALIDADES.map((m) => (
+                {MODALIDADES_LIST.map((m) => (
                   <option key={m.value} value={m.value}>
                     {m.label}
                   </option>
@@ -243,15 +308,20 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
                 Nivel
               </label>
               <select
-                value={nivel}
+                value={modalidad === 'EBE' ? '—' : nivel}
+                disabled={modalidad === 'EBE'}
                 onChange={(e) => handleNivelChange(e.target.value)}
-                className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-xs font-bold text-slate-900 dark:text-white outline-none focus:border-indigo-600 cursor-pointer"
+                className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-xs font-bold text-slate-900 dark:text-white outline-none focus:border-indigo-600 cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed"
               >
-                {nivelesDisponibles.map((n) => (
-                  <option key={n.value} value={n.value}>
-                    {n.label}
-                  </option>
-                ))}
+                {modalidad === 'EBE' ? (
+                  <option value="—">—</option>
+                ) : (
+                  nivelesDisponibles.map((n) => (
+                    <option key={n.value} value={n.value}>
+                      {n.label}
+                    </option>
+                  ))
+                )}
               </select>
             </div>
           </div>
@@ -266,16 +336,18 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
             <div className="grid grid-cols-2 gap-3">
               <button
                 type="button"
+                disabled={modalidad === 'EBE'}
                 onClick={handleAgregarTodas}
-                className="bg-[#38a169] hover:bg-[#2f855a] text-white font-extrabold text-[11px] uppercase py-2.5 px-3 rounded-xl transition-all shadow-xs cursor-pointer text-center"
+                className="bg-[#38a169] hover:bg-[#2f855a] text-white font-extrabold text-[11px] uppercase py-2.5 px-3 rounded-xl transition-all shadow-xs cursor-pointer text-center disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 AGREGAR TODAS
               </button>
 
               <button
                 type="button"
+                disabled={modalidad === 'EBE'}
                 onClick={handleAgregarIndividual}
-                className="border-2 border-purple-400 dark:border-purple-700 text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/40 hover:bg-purple-100 font-extrabold text-[11px] uppercase py-2.5 px-3 rounded-xl transition-all text-center cursor-pointer shadow-2xs active:scale-95"
+                className="border-2 border-purple-400 dark:border-purple-700 text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/40 hover:bg-purple-100 font-extrabold text-[11px] uppercase py-2.5 px-3 rounded-xl transition-all text-center cursor-pointer shadow-2xs active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 AGREGAR INDIVIDUALMENTE
               </button>
@@ -284,15 +356,36 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
             {/* Panel de Selección Individual */}
             <div className="flex items-center space-x-2 pt-1">
               <select
-                value={selectedAreaInput}
+                value={
+                  modalidad === 'EBE'
+                    ? '—'
+                    : areasDisponibles.length === 0
+                    ? (NIVELES_POR_MODALIDAD_DATA[modalidad as ModalidadKey] || []).find((n) => n.value === nivel)?.label || nivel
+                    : selectedAreaInput
+                }
+                disabled={modalidad === 'EBE'}
                 onChange={(e) => setSelectedAreaInput(e.target.value)}
-                className="flex-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-xs font-bold text-slate-900 dark:text-white outline-none focus:border-indigo-600 cursor-pointer"
+                className="flex-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-xs font-bold text-slate-900 dark:text-white outline-none focus:border-indigo-600 cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed"
               >
-                {areasDisponibles.map((a) => (
-                  <option key={a} value={a}>
-                    {a}
+                {modalidad === 'EBE' ? (
+                  <option value="—">—</option>
+                ) : areasDisponibles.length === 0 ? (
+                  <option
+                    value={
+                      (NIVELES_POR_MODALIDAD_DATA[modalidad as ModalidadKey] || []).find((n) => n.value === nivel)?.label || nivel
+                    }
+                  >
+                    {
+                      (NIVELES_POR_MODALIDAD_DATA[modalidad as ModalidadKey] || []).find((n) => n.value === nivel)?.label || nivel
+                    }
                   </option>
-                ))}
+                ) : (
+                  areasDisponibles.map((a) => (
+                    <option key={a} value={a}>
+                      {a}
+                    </option>
+                  ))
+                )}
               </select>
 
               <button
@@ -339,6 +432,87 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
                 </div>
               )}
             </div>
+
+            {/* 1. SECCIÓN: INFORMACIÓN DE SUSCRIPCIÓN */}
+            <div className="bg-slate-50/80 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/80 rounded-2xl p-4 space-y-4">
+              <div className="flex items-center space-x-2 text-indigo-600 dark:text-indigo-400 font-extrabold text-xs uppercase tracking-wider">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <span>Información de Suscripción</span>
+              </div>
+
+              <div className="space-y-2 pl-1">
+                {[
+                  { key: '1_year', label: '1 año desde hoy' },
+                  { key: '1_month', label: '1 mes desde hoy' },
+                  { key: '6_months', label: '6 meses desde hoy' },
+                  { key: 'custom', label: 'Elegir fecha específica' },
+                ].map((item) => (
+                  <label key={item.key} className="flex items-center space-x-2.5 text-xs font-bold text-slate-700 dark:text-slate-200 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="duracionOptionModal"
+                      checked={duracionOption === item.key}
+                      onChange={() => handleDuracionOptionChange(item.key as any)}
+                      className="w-4 h-4 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                    />
+                    <span>{item.label}</span>
+                  </label>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 pt-1">
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400">F. Inicio</label>
+                  <input
+                    type="date"
+                    value={fechaInicio}
+                    onChange={(e) => handleFechaInicioChange(e.target.value)}
+                    className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-800 dark:text-white outline-none focus:border-indigo-600 cursor-pointer"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400">F. Fin / Expiración</label>
+                  <input
+                    type="date"
+                    value={fechaFin}
+                    disabled={duracionOption !== 'custom'}
+                    onChange={(e) => setFechaFin(e.target.value)}
+                    className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-800 dark:text-white outline-none focus:border-indigo-600 disabled:opacity-75 disabled:bg-slate-100 dark:disabled:bg-slate-800/80 cursor-pointer"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* 2. SECCIÓN: TIPO DE ACCESO* */}
+            <div className="bg-slate-50/80 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/80 rounded-2xl p-4 space-y-3">
+              <div className="flex items-center space-x-2 text-indigo-600 dark:text-indigo-400 font-extrabold text-xs uppercase tracking-wider">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+                <span>Tipo de Acceso*</span>
+              </div>
+
+              <div className="space-y-2 pl-1">
+                {[
+                  { key: 'Ascenso', label: 'Ascenso' },
+                  { key: 'Nombramiento', label: 'Nombramiento' },
+                  { key: 'Directivo', label: 'Directivo' },
+                ].map((acc) => (
+                  <label key={acc.key} className="flex items-center space-x-2.5 text-xs font-bold text-slate-700 dark:text-slate-200 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={tiposAcceso[acc.key as keyof typeof tiposAcceso]}
+                      onChange={(e) => setTiposAcceso((prev) => ({ ...prev, [acc.key]: e.target.checked }))}
+                      className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500 cursor-pointer"
+                    />
+                    <span>{acc.label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
           </div>
 
           {/* Pie del Modal */}
@@ -352,12 +526,13 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
             </button>
             <button
               type="submit"
-              className="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold uppercase shadow-md transition-colors cursor-pointer"
+              className="w-full sm:w-auto px-6 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold uppercase shadow-md transition-colors cursor-pointer"
             >
-              GUARDAR ACCESO PREMIUM
+              Guardar usuario
             </button>
           </div>
         </form>
+        </div>
       </div>
     </div>
   );

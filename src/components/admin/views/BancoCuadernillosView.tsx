@@ -54,6 +54,11 @@ export const BancoCuadernillosView: React.FC = () => {
   const [origenResolucion, setOrigenResolucion] = useState<'AVEND' | 'MINEDU' | 'OTRO'>('AVEND');
   const [origenClaves, setOrigenClaves] = useState<'MINEDU' | 'AVEND' | 'OTRO'>('MINEDU');
 
+  // Códigos de Examen independientes para trazabilidad
+  const [codigoCuadernillo, setCodigoCuadernillo] = useState('');
+  const [codigoResolucion, setCodigoResolucion] = useState('');
+  const [codigoClaves, setCodigoClaves] = useState('');
+
   // 3. Estado de Evaluaciones Existentes para Detección Automática por Filtros
   const [evaluaciones, setEvaluaciones] = useState<Evaluacion[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -313,6 +318,9 @@ export const BancoCuadernillosView: React.FC = () => {
       origenCuadernillo,
       origenResolucion,
       origenClaves,
+      codigoCuadernillo: codigoCuadernillo.trim() || undefined,
+      codigoResolucion: codigoResolucion.trim() || undefined,
+      codigoClaves: codigoClaves.trim() || undefined,
     });
 
     setIsSubmitting(false);
@@ -435,16 +443,20 @@ export const BancoCuadernillosView: React.FC = () => {
               NIVEL EDUCATIVO (NIVEL 3)
             </label>
             <select
-              value={nivel}
-              disabled={proceso === 'ACCESO_CARGOS_DIRECTIVOS'}
+              value={modalidad === 'EBE' ? 'NO_APLICA' : nivel}
+              disabled={proceso === 'ACCESO_CARGOS_DIRECTIVOS' || modalidad === 'EBE'}
               onChange={(e) => handleNivelChange(e.target.value as NivelEducativo)}
-              className="w-full bg-slate-50 dark:bg-slate-800 border border-blue-500/80 dark:border-blue-700 rounded-xl p-3 text-xs font-bold text-slate-800 dark:text-white outline-none focus:border-blue-600 disabled:opacity-50 cursor-pointer shadow-2xs"
+              className="w-full bg-slate-50 dark:bg-slate-800 border border-blue-500/80 dark:border-blue-700 rounded-xl p-3 text-xs font-bold text-slate-800 dark:text-white outline-none focus:border-blue-600 disabled:opacity-60 cursor-pointer shadow-2xs"
             >
-              {nivelesDisponibles.map((n) => (
-                <option key={n.value} value={n.value}>
-                  {n.label}
-                </option>
-              ))}
+              {modalidad === 'EBE' ? (
+                <option value="—">—</option>
+              ) : (
+                nivelesDisponibles.map((n) => (
+                  <option key={n.value} value={n.value}>
+                    {n.label}
+                  </option>
+                ))
+              )}
             </select>
           </div>
 
@@ -454,12 +466,12 @@ export const BancoCuadernillosView: React.FC = () => {
               {proceso === 'ACCESO_CARGOS_DIRECTIVOS' ? 'CARGO A POSTULAR (MINEDU)' : 'ÁREA / ESPECIALIDAD DOCENTE (NIVEL 4)'}
             </label>
             <select
-              value={areasDisponibles.length === 0 ? '—' : area}
+              value={modalidad === 'EBE' || areasDisponibles.length === 0 ? '—' : area}
               onChange={(e) => setArea(e.target.value)}
-              disabled={areasDisponibles.length === 0}
-              className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-xs font-bold text-slate-800 dark:text-white outline-none focus:border-blue-600 cursor-pointer disabled:opacity-80 disabled:cursor-not-allowed"
+              disabled={modalidad === 'EBE' || areasDisponibles.length === 0}
+              className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-xs font-bold text-slate-800 dark:text-white outline-none focus:border-blue-600 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              {areasDisponibles.length === 0 ? (
+              {modalidad === 'EBE' || areasDisponibles.length === 0 ? (
                 <option value="—">—</option>
               ) : (
                 areasDisponibles.map((esp) => (
@@ -652,6 +664,20 @@ export const BancoCuadernillosView: React.FC = () => {
                   ))}
                 </div>
               </div>
+
+              {/* CÓDIGO DE EXAMEN: CUADERNILLO */}
+              <div className="space-y-1.5 pt-2 border-t border-slate-200/80 dark:border-slate-700/80">
+                <label className="block text-[10px] font-black uppercase text-slate-600 dark:text-slate-300">
+                  CÓDIGO DE EXAMEN:
+                </label>
+                <input
+                  type="text"
+                  value={codigoCuadernillo}
+                  onChange={(e) => setCodigoCuadernillo(e.target.value)}
+                  placeholder="Ej.: MINEDU-2024-C01"
+                  className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:border-blue-600 shadow-2xs transition-colors"
+                />
+              </div>
             </div>
 
             {/* Tarjeta 2: RESOLUCIÓN DESARROLLADA */}
@@ -727,6 +753,20 @@ export const BancoCuadernillosView: React.FC = () => {
                   ))}
                 </div>
               </div>
+
+              {/* CÓDIGO DE EXAMEN: RESOLUCIÓN */}
+              <div className="space-y-1.5 pt-2 border-t border-slate-200/80 dark:border-slate-700/80">
+                <label className="block text-[10px] font-black uppercase text-slate-600 dark:text-slate-300">
+                  CÓDIGO DE EXAMEN:
+                </label>
+                <input
+                  type="text"
+                  value={codigoResolucion}
+                  onChange={(e) => setCodigoResolucion(e.target.value)}
+                  placeholder="Ej.: AVEND-2024-R01"
+                  className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:border-blue-600 shadow-2xs transition-colors"
+                />
+              </div>
             </div>
 
             {/* Tarjeta 3: CLAVES DE LA PRUEBA */}
@@ -801,6 +841,20 @@ export const BancoCuadernillosView: React.FC = () => {
                     </button>
                   ))}
                 </div>
+              </div>
+
+              {/* CÓDIGO DE EXAMEN: CLAVES */}
+              <div className="space-y-1.5 pt-2 border-t border-slate-200/80 dark:border-slate-700/80">
+                <label className="block text-[10px] font-black uppercase text-slate-600 dark:text-slate-300">
+                  CÓDIGO DE EXAMEN:
+                </label>
+                <input
+                  type="text"
+                  value={codigoClaves}
+                  onChange={(e) => setCodigoClaves(e.target.value)}
+                  placeholder="Ej.: MINEDU-2024-K01"
+                  className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:border-blue-600 shadow-2xs transition-colors"
+                />
               </div>
             </div>
           </div>

@@ -5,6 +5,14 @@ import React, { useState } from 'react';
 import { createEvaluationAction, generateR2UploadUrlAction } from '@/services/adminService';
 import { ProcesoMinedu, ModalidadEducativa, NivelEducativo } from '@/types/evaluacion';
 
+import {
+  MODALIDADES_LIST,
+  NIVELES_POR_MODALIDAD as NIVELES_POR_MODALIDAD_DATA,
+  AREAS_POR_MODALIDAD_NIVEL,
+  ESPECIALIDADES_DIRECTIVOS_LIST,
+  ModalidadKey,
+} from '@/data/cascadingData';
+
 interface EvaluationFormModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -132,7 +140,7 @@ export const EvaluationFormModal: React.FC<EvaluationFormModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-950/70 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="relative w-full max-w-2xl bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 p-6 sm:p-8 shadow-2xl max-h-[90vh] overflow-y-auto">
+      <div className="relative w-full max-w-2xl bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 p-6 sm:p-8 shadow-2xl max-h-[85vh] overflow-y-auto custom-scrollbar">
         <div className="flex items-center justify-between mb-5">
           <span className="px-3 py-1 rounded-full bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 text-xs font-extrabold uppercase tracking-wider border border-blue-100 dark:border-blue-900">
             ➕ Ingesta de Material MINEDU & AVEND
@@ -200,7 +208,20 @@ export const EvaluationFormModal: React.FC<EvaluationFormModalProps> = ({
               <label className="text-xs font-bold text-gray-700 dark:text-gray-300">Proceso</label>
               <select
                 value={proceso}
-                onChange={(e) => setProceso(e.target.value as ProcesoMinedu)}
+                onChange={(e) => {
+                  const newProc = e.target.value as ProcesoMinedu;
+                  setProceso(newProc);
+                  if (newProc === 'ACCESO_CARGOS_DIRECTIVOS') {
+                    setNivel('NO_APLICA');
+                    setEspecialidad(ESPECIALIDADES_DIRECTIVOS_LIST[0]);
+                  } else {
+                    const list = NIVELES_POR_MODALIDAD_DATA[modalidad as ModalidadKey] || NIVELES_POR_MODALIDAD_DATA.EBR;
+                    const primerNivel = list[0].value as NivelEducativo;
+                    setNivel(primerNivel);
+                    const areasList = AREAS_POR_MODALIDAD_NIVEL[modalidad as ModalidadKey]?.[primerNivel] || [];
+                    setEspecialidad(areasList[0] || '—');
+                  }
+                }}
                 className="w-full h-10 px-2 rounded-xl border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-xs"
               >
                 <option value="NOMBRAMIENTO_DOCENTE">Nombramiento Docente</option>
@@ -213,26 +234,48 @@ export const EvaluationFormModal: React.FC<EvaluationFormModalProps> = ({
               <label className="text-xs font-bold text-gray-700 dark:text-gray-300">Modalidad</label>
               <select
                 value={modalidad}
-                onChange={(e) => setModalidad(e.target.value as ModalidadEducativa)}
-                className="w-full h-10 px-2 rounded-xl border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-xs"
+                disabled={proceso === 'ACCESO_CARGOS_DIRECTIVOS'}
+                onChange={(e) => {
+                  const newMod = e.target.value as ModalidadEducativa;
+                  setModalidad(newMod);
+                  const list = NIVELES_POR_MODALIDAD_DATA[newMod as ModalidadKey] || NIVELES_POR_MODALIDAD_DATA.EBR;
+                  const primerNivel = list[0].value as NivelEducativo;
+                  setNivel(primerNivel);
+                  const areasList = AREAS_POR_MODALIDAD_NIVEL[newMod as ModalidadKey]?.[primerNivel] || [];
+                  setEspecialidad(areasList[0] || '—');
+                }}
+                className="w-full h-10 px-2 rounded-xl border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-xs disabled:opacity-60"
               >
-                <option value="EBR">EBR</option>
-                <option value="EBA">EBA</option>
-                <option value="EBE">EBE</option>
+                {MODALIDADES_LIST.map((m) => (
+                  <option key={m.value} value={m.value}>
+                    {m.label}
+                  </option>
+                ))}
               </select>
             </div>
 
             <div className="space-y-1">
               <label className="text-xs font-bold text-gray-700 dark:text-gray-300">Nivel</label>
               <select
-                value={nivel}
-                onChange={(e) => setNivel(e.target.value as NivelEducativo)}
-                className="w-full h-10 px-2 rounded-xl border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-xs"
+                value={modalidad === 'EBE' ? 'NO_APLICA' : nivel}
+                disabled={proceso === 'ACCESO_CARGOS_DIRECTIVOS' || modalidad === 'EBE'}
+                onChange={(e) => {
+                  const newNiv = e.target.value as NivelEducativo;
+                  setNivel(newNiv);
+                  const areasList = AREAS_POR_MODALIDAD_NIVEL[modalidad as ModalidadKey]?.[newNiv] || [];
+                  setEspecialidad(areasList[0] || '—');
+                }}
+                className="w-full h-10 px-2 rounded-xl border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-xs disabled:opacity-60"
               >
-                <option value="INICIAL">Inicial</option>
-                <option value="PRIMARIA">Primaria</option>
-                <option value="SECUNDARIA">Secundaria</option>
-                <option value="SUPERIOR_TECNICO">Superior / Directivos</option>
+                {modalidad === 'EBE' ? (
+                  <option value="—">—</option>
+                ) : (
+                  (NIVELES_POR_MODALIDAD_DATA[modalidad as ModalidadKey] || NIVELES_POR_MODALIDAD_DATA.EBR).map((n) => (
+                    <option key={n.value} value={n.value}>
+                      {n.label}
+                    </option>
+                  ))
+                )}
               </select>
             </div>
           </div>
@@ -241,13 +284,36 @@ export const EvaluationFormModal: React.FC<EvaluationFormModalProps> = ({
             <label className="text-xs font-bold text-gray-700 dark:text-gray-300">
               Especialidad / Área
             </label>
-            <input
-              type="text"
-              value={especialidad}
-              onChange={(e) => setEspecialidad(e.target.value)}
-              placeholder="Matemática"
-              className="w-full h-10 px-3 rounded-xl border border-gray-300 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800 text-xs"
-            />
+            {proceso === 'ACCESO_CARGOS_DIRECTIVOS' ? (
+              <select
+                value={especialidad}
+                onChange={(e) => setEspecialidad(e.target.value)}
+                className="w-full h-10 px-3 rounded-xl border border-gray-300 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800 text-xs font-bold"
+              >
+                {ESPECIALIDADES_DIRECTIVOS_LIST.map((esp) => (
+                  <option key={esp} value={esp}>
+                    {esp}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <select
+                value={(AREAS_POR_MODALIDAD_NIVEL[modalidad as ModalidadKey]?.[nivel] || []).length === 0 ? '—' : especialidad}
+                onChange={(e) => setEspecialidad(e.target.value)}
+                disabled={(AREAS_POR_MODALIDAD_NIVEL[modalidad as ModalidadKey]?.[nivel] || []).length === 0}
+                className="w-full h-10 px-3 rounded-xl border border-gray-300 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800 text-xs font-bold disabled:opacity-80"
+              >
+                {(AREAS_POR_MODALIDAD_NIVEL[modalidad as ModalidadKey]?.[nivel] || []).length === 0 ? (
+                  <option value="—">—</option>
+                ) : (
+                  (AREAS_POR_MODALIDAD_NIVEL[modalidad as ModalidadKey]?.[nivel] || []).map((esp) => (
+                    <option key={esp} value={esp}>
+                      {esp}
+                    </option>
+                  ))
+                )}
+              </select>
+            )}
           </div>
 
           {/* Selector de Origen de Recursos (MINEDU / AVEND) */}

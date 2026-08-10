@@ -10,44 +10,103 @@ export type ActionResponse<T> =
   | { success: true; data: T }
   | { success: false; error: { code: string; message: string } };
 
-export interface AdminAccount {
-  userOrEmail: string[];
-  passOrPin: string[];
-  name: string;
-  role: string;
+import { OFFICIAL_ADMIN_ACCOUNTS, AdminAccount } from '@/data/adminAccounts';
+
+export type { AdminAccount };
+
+export interface AdminUserItem {
+  id: string;
+  nombre: string;
+  email: string;
+  usuario: string;
+  password?: string;
+  rol: 'SUPERADMINISTRADOR' | 'ADMINISTRADOR' | string;
+  estado: 'ACTIVO' | 'PAUSADO';
+  permisoUsuarios: boolean;
+  permisoCuadernillos: boolean;
+  permisoRecursos: boolean;
+  permisoMetricas: boolean;
+  creadoPor?: string;
+  modificadoPor?: string;
+  createdAt: string;
 }
 
-// Lista Oficial Interna de los 5 Administradores de la Plataforma AVEND ESCALA
-const OFFICIAL_ADMIN_ACCOUNTS: AdminAccount[] = [
+// Lista Oficial Inicial de Administradores
+const INITIAL_ADMIN_ACCOUNTS: AdminUserItem[] = [
   {
-    userOrEmail: ['admin@avend.pe', 'juan.avend', 'admin', 'admin@avend.com'],
-    passOrPin: ['AdminAvend2026!', '2026'],
-    name: 'Juan Avend',
-    role: 'SUPERADMINISTRADOR',
+    id: 'admin-super-juan',
+    nombre: 'Juan Avend',
+    email: 'cajacuenta767@gmail.com',
+    usuario: 'cajacuenta767',
+    password: '987654',
+    rol: 'SUPERADMINISTRADOR',
+    estado: 'ACTIVO',
+    permisoUsuarios: true,
+    permisoCuadernillos: true,
+    permisoRecursos: true,
+    permisoMetricas: true,
+    creadoPor: 'Sistema AVEND',
+    createdAt: new Date().toISOString(),
   },
   {
-    userOrEmail: ['administrador@avend.pe', 'admin01@avend.pe', 'admin01'],
-    passOrPin: ['AvendAdmin2026!', '123456'],
-    name: 'Administrador 01',
-    role: 'ADMINISTRADOR',
+    id: 'admin-01',
+    nombre: 'Administrador 01',
+    email: 'administrador@avend.pe',
+    usuario: 'admin01',
+    password: '123456',
+    rol: 'ADMINISTRADOR',
+    estado: 'ACTIVO',
+    permisoUsuarios: true,
+    permisoCuadernillos: true,
+    permisoRecursos: true,
+    permisoMetricas: true,
+    creadoPor: 'Juan Avend',
+    createdAt: new Date().toISOString(),
   },
   {
-    userOrEmail: ['soporte@avend.pe', 'admin02@avend.pe', 'carlos.mendoza'],
-    passOrPin: ['SoporteAvend2026!', '2026'],
-    name: 'Carlos Mendoza (Soporte)',
-    role: 'ADMINISTRADOR',
+    id: 'admin-02',
+    nombre: 'Carlos Mendoza (Soporte)',
+    email: 'soporte@avend.pe',
+    usuario: 'carlos.mendoza',
+    password: '2026',
+    rol: 'ADMINISTRADOR',
+    estado: 'ACTIVO',
+    permisoUsuarios: true,
+    permisoCuadernillos: false,
+    permisoRecursos: false,
+    permisoMetricas: true,
+    creadoPor: 'Juan Avend',
+    createdAt: new Date().toISOString(),
   },
   {
-    userOrEmail: ['evaluaciones@avend.pe', 'admin03@avend.pe', 'maria.fernanda'],
-    passOrPin: ['MineduAvend2026!', '2026'],
-    name: 'María Fernanda (MINEDU)',
-    role: 'ADMINISTRADOR',
+    id: 'admin-03',
+    nombre: 'María Fernanda (MINEDU)',
+    email: 'evaluaciones@avend.pe',
+    usuario: 'maria.fernanda',
+    password: '2026',
+    rol: 'ADMINISTRADOR',
+    estado: 'ACTIVO',
+    permisoUsuarios: false,
+    permisoCuadernillos: true,
+    permisoRecursos: true,
+    permisoMetricas: false,
+    creadoPor: 'Juan Avend',
+    createdAt: new Date().toISOString(),
   },
   {
-    userOrEmail: ['auditoria@avend.pe', 'admin04@avend.pe', 'diego.ramirez'],
-    passOrPin: ['AuditoriaAvend2026!', '2026'],
-    name: 'Diego Ramírez (Auditor)',
-    role: 'ADMINISTRADOR',
+    id: 'admin-04',
+    nombre: 'Diego Ramírez (Auditor)',
+    email: 'auditoria@avend.pe',
+    usuario: 'diego.ramirez',
+    password: '2026',
+    rol: 'ADMINISTRADOR',
+    estado: 'ACTIVO',
+    permisoUsuarios: false,
+    permisoCuadernillos: false,
+    permisoRecursos: false,
+    permisoMetricas: true,
+    creadoPor: 'Juan Avend',
+    createdAt: new Date().toISOString(),
   },
 ];
 
@@ -56,30 +115,246 @@ export async function getOfficialAdminAccountsAction(): Promise<ActionResponse<A
 }
 
 /**
+ * Obtener todos los Administradores desde la Base de Datos PostgreSQL (con fallback a lista inicial)
+ */
+export async function getAdminUsersAction(): Promise<ActionResponse<AdminUserItem[]>> {
+  try {
+    const dbAdmins = await prisma.adminUser.findMany({
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (dbAdmins && dbAdmins.length > 0) {
+      const list: AdminUserItem[] = dbAdmins.map((item) => ({
+        id: item.id,
+        nombre: item.nombre,
+        email: item.email,
+        usuario: item.usuario,
+        password: item.password,
+        rol: item.rol,
+        estado: item.estado as 'ACTIVO' | 'PAUSADO',
+        permisoUsuarios: item.permisoUsuarios,
+        permisoCuadernillos: item.permisoCuadernillos,
+        permisoRecursos: item.permisoRecursos,
+        permisoMetricas: item.permisoMetricas,
+        creadoPor: item.creadoPor || 'Juan Avend',
+        modificadoPor: item.modificadoPor || 'Juan Avend',
+        createdAt: item.createdAt.toISOString(),
+      }));
+      return { success: true, data: list };
+    }
+
+    return { success: true, data: INITIAL_ADMIN_ACCOUNTS };
+  } catch (error: any) {
+    console.error('❌ [GET ADMIN USERS ERROR]:', error);
+    return { success: true, data: INITIAL_ADMIN_ACCOUNTS };
+  }
+}
+
+/**
+ * Crear un Nuevo Administrador con asignación de funciones (Permisos Exclusivos de SUPERADMINISTRADOR)
+ */
+export async function createAdminUserAction(data: {
+  nombre: string;
+  email: string;
+  usuario: string;
+  password?: string;
+  rol?: string;
+  permisoUsuarios?: boolean;
+  permisoCuadernillos?: boolean;
+  permisoRecursos?: boolean;
+  permisoMetricas?: boolean;
+  creadoPor?: string;
+}): Promise<ActionResponse<{ id: string }>> {
+  try {
+    const cleanNombre = (data.nombre || '').trim();
+    const cleanEmail = (data.email || '').trim().toLowerCase();
+    const cleanUsuario = (data.usuario || '').trim().toLowerCase();
+    const cleanPassword = (data.password || 'Admin2026!').trim();
+
+    if (!cleanNombre || !cleanEmail || !cleanUsuario) {
+      return { success: false, error: { code: 'INVALID_INPUT', message: 'Ingresa nombre, correo y usuario.' } };
+    }
+
+    const created = await prisma.adminUser.create({
+      data: {
+        nombre: cleanNombre,
+        email: cleanEmail,
+        usuario: cleanUsuario,
+        password: cleanPassword,
+        rol: data.rol || 'ADMINISTRADOR',
+        estado: 'ACTIVO',
+        permisoUsuarios: Boolean(data.permisoUsuarios ?? true),
+        permisoCuadernillos: Boolean(data.permisoCuadernillos ?? true),
+        permisoRecursos: Boolean(data.permisoRecursos ?? true),
+        permisoMetricas: Boolean(data.permisoMetricas ?? true),
+        creadoPor: data.creadoPor || 'Juan Avend',
+        modificadoPor: data.creadoPor || 'Juan Avend',
+      },
+    });
+
+    return { success: true, data: { id: created.id } };
+  } catch (error: any) {
+    console.error('❌ [CREATE ADMIN USER ERROR]:', error);
+    return { success: false, error: { code: 'CREATE_FAILED', message: `Error al crear administrador: ${error?.message || error}` } };
+  }
+}
+
+/**
+ * Actualizar datos y casillas de permisos de un Administrador
+ */
+export async function updateAdminUserAction(
+  id: string,
+  data: {
+    nombre?: string;
+    email?: string;
+    usuario?: string;
+    password?: string;
+    rol?: string;
+    estado?: string;
+    permisoUsuarios?: boolean;
+    permisoCuadernillos?: boolean;
+    permisoRecursos?: boolean;
+    permisoMetricas?: boolean;
+    modificadoPor?: string;
+  }
+): Promise<ActionResponse<{ id: string }>> {
+  try {
+    const updated = await prisma.adminUser.update({
+      where: { id },
+      data: {
+        ...(data.nombre && { nombre: data.nombre.trim() }),
+        ...(data.email && { email: data.email.trim().toLowerCase() }),
+        ...(data.usuario && { usuario: data.usuario.trim().toLowerCase() }),
+        ...(data.password && { password: data.password.trim() }),
+        ...(data.rol && { rol: data.rol }),
+        ...(data.estado && { estado: data.estado }),
+        ...(data.permisoUsuarios !== undefined && { permisoUsuarios: data.permisoUsuarios }),
+        ...(data.permisoCuadernillos !== undefined && { permisoCuadernillos: data.permisoCuadernillos }),
+        ...(data.permisoRecursos !== undefined && { permisoRecursos: data.permisoRecursos }),
+        ...(data.permisoMetricas !== undefined && { permisoMetricas: data.permisoMetricas }),
+        ...(data.modificadoPor && { modificadoPor: data.modificadoPor }),
+      },
+    });
+
+    return { success: true, data: { id: updated.id } };
+  } catch (error: any) {
+    console.error('❌ [UPDATE ADMIN USER ERROR]:', error);
+    return { success: false, error: { code: 'UPDATE_FAILED', message: 'Error al actualizar administrador.' } };
+  }
+}
+
+/**
+ * Eliminar un Administrador
+ */
+export async function deleteAdminUserAction(id: string): Promise<ActionResponse<{ id: string }>> {
+  try {
+    await prisma.adminUser.delete({ where: { id } });
+    return { success: true, data: { id } };
+  } catch (error: any) {
+    console.error('❌ [DELETE ADMIN USER ERROR]:', error);
+    return { success: false, error: { code: 'DELETE_FAILED', message: 'Error al eliminar administrador.' } };
+  }
+}
+
+/**
  * Autenticación oficial estricta para el Dashboard Administrador.
- * Valida credenciales contra la lista oficial de los 5 Administradores.
  */
 export async function verifyAdminCredentialsAction(
   userOrEmail: string,
   passOrPin: string
-): Promise<ActionResponse<{ token: string; name: string; role: string }>> {
+): Promise<ActionResponse<{
+  token: string;
+  name: string;
+  email?: string;
+  role: string;
+  permisoUsuarios: boolean;
+  permisoCuadernillos: boolean;
+  permisoRecursos: boolean;
+  permisoMetricas: boolean;
+}>> {
   try {
     const cleanUser = (userOrEmail || '').trim().toLowerCase();
     const cleanPass = (passOrPin || '').trim();
 
-    const matchedAccount = OFFICIAL_ADMIN_ACCOUNTS.find(
-      (acc) =>
-        acc.userOrEmail.map((u) => u.toLowerCase()).includes(cleanUser) &&
-        acc.passOrPin.includes(cleanPass)
+    // 1. Probar contra base de datos PostgreSQL filtrando estrictamente por usuario/email si se proporciona
+    try {
+      const whereClause: any = {
+        password: cleanPass,
+        estado: 'ACTIVO',
+      };
+      if (cleanUser) {
+        whereClause.OR = [{ email: cleanUser }, { usuario: cleanUser }];
+      }
+
+      const dbAdmin = await prisma.adminUser.findFirst({ where: whereClause });
+
+      if (dbAdmin) {
+        return {
+          success: true,
+          data: {
+            token: `admin_session_${Date.now()}_${dbAdmin.nombre.replace(/\s+/g, '_').toLowerCase()}`,
+            name: dbAdmin.nombre,
+            email: dbAdmin.email,
+            role: dbAdmin.rol,
+            permisoUsuarios: dbAdmin.permisoUsuarios ?? true,
+            permisoCuadernillos: dbAdmin.permisoCuadernillos ?? true,
+            permisoRecursos: dbAdmin.permisoRecursos ?? true,
+            permisoMetricas: dbAdmin.permisoMetricas ?? true,
+          },
+        };
+      }
+    } catch {}
+
+    // 2. Probar coincidencia por correo específico en cuentas oficiales
+    if (cleanUser) {
+      const matchedByEmail = OFFICIAL_ADMIN_ACCOUNTS.find(
+        (acc) =>
+          acc.userOrEmail.map((u) => u.toLowerCase()).includes(cleanUser) &&
+          acc.passOrPin.includes(cleanPass)
+      );
+
+      if (matchedByEmail) {
+        const matchedAccount = INITIAL_ADMIN_ACCOUNTS.find(
+          (acc) => acc.email.toLowerCase() === matchedByEmail.userOrEmail[0].toLowerCase()
+        );
+
+        return {
+          success: true,
+          data: {
+            token: `admin_session_${Date.now()}_${matchedByEmail.name.replace(/\s+/g, '_').toLowerCase()}`,
+            name: matchedByEmail.name,
+            email: matchedByEmail.userOrEmail[0],
+            role: matchedByEmail.role,
+            permisoUsuarios: matchedAccount ? matchedAccount.permisoUsuarios : true,
+            permisoCuadernillos: matchedAccount ? matchedAccount.permisoCuadernillos : true,
+            permisoRecursos: matchedAccount ? matchedAccount.permisoRecursos : true,
+            permisoMetricas: matchedAccount ? matchedAccount.permisoMetricas : true,
+          },
+        };
+      }
+    }
+
+    // 3. Fallback a cuentas oficiales por PIN único si no se proveyó correo específico
+    const matchedOfficial = OFFICIAL_ADMIN_ACCOUNTS.find((acc) =>
+      acc.passOrPin.includes(cleanPass)
     );
 
-    if (matchedAccount) {
+    if (matchedOfficial) {
+      const matchedAccount = INITIAL_ADMIN_ACCOUNTS.find(
+        (acc) => acc.email.toLowerCase() === matchedOfficial.userOrEmail[0].toLowerCase()
+      );
+
       return {
         success: true,
         data: {
-          token: `admin_session_${Date.now()}_${matchedAccount.name.replace(/\s+/g, '_').toLowerCase()}`,
-          name: matchedAccount.name,
-          role: matchedAccount.role,
+          token: `admin_session_${Date.now()}_${matchedOfficial.name.replace(/\s+/g, '_').toLowerCase()}`,
+          name: matchedOfficial.name,
+          email: matchedOfficial.userOrEmail[0],
+          role: matchedOfficial.role,
+          permisoUsuarios: matchedAccount ? matchedAccount.permisoUsuarios : true,
+          permisoCuadernillos: matchedAccount ? matchedAccount.permisoCuadernillos : true,
+          permisoRecursos: matchedAccount ? matchedAccount.permisoRecursos : true,
+          permisoMetricas: matchedAccount ? matchedAccount.permisoMetricas : true,
         },
       };
     }
@@ -88,7 +363,7 @@ export async function verifyAdminCredentialsAction(
       success: false,
       error: {
         code: 'INVALID_CREDENTIALS',
-        message: 'Credenciales de Administrador incorrectas. Revisa usuario y contraseña.',
+        message: 'Credenciales o Código de Acceso Asignado incorrecto. Revisa correo y clave.',
       },
     };
   } catch (error: any) {
@@ -96,6 +371,41 @@ export async function verifyAdminCredentialsAction(
       success: false,
       error: { code: 'AUTH_ERROR', message: error?.message || 'Error en autenticación.' },
     };
+  }
+}
+
+/**
+ * Verifica si un correo electrónico pertenece a un Administrador para redirigir al Dashboard
+ */
+export async function checkIsAdminEmailAction(email: string): Promise<{ isAdmin: boolean; name?: string }> {
+  try {
+    const cleanEmail = (email || '').trim().toLowerCase();
+    if (!cleanEmail) return { isAdmin: false };
+
+    // 1. Verificar en base de datos PostgreSQL
+    const dbAdmin = await prisma.adminUser.findFirst({
+      where: {
+        OR: [{ email: cleanEmail }, { usuario: cleanEmail }],
+        estado: 'ACTIVO',
+      },
+    });
+
+    if (dbAdmin) {
+      return { isAdmin: true, name: dbAdmin.nombre };
+    }
+
+    // 2. Verificar en lista oficial de cuentas de administración
+    const matchedOfficial = OFFICIAL_ADMIN_ACCOUNTS.find(
+      (acc) => acc.userOrEmail.map((u) => u.toLowerCase()).includes(cleanEmail)
+    );
+
+    if (matchedOfficial) {
+      return { isAdmin: true, name: matchedOfficial.name };
+    }
+
+    return { isAdmin: false };
+  } catch (error) {
+    return { isAdmin: false };
   }
 }
 
