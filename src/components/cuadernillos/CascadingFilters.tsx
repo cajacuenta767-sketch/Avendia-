@@ -238,13 +238,17 @@ export const CascadingFilters: React.FC<CascadingFiltersProps> = ({
               Nivel
             </label>
             <select
-              value={filters.modalidad === 'EBE' ? '—' : filters.nivel && filters.nivel !== 'TODOS' ? filters.nivel : ''}
+              value={filters.modalidad === 'EBE' ? '—' : currentNivel}
               onChange={(e) => handleNivelChange(e.target.value)}
-              disabled={filters.modalidad === 'EBE'}
-              className="w-full h-10 px-3 rounded-xl border border-gray-200 dark:border-slate-800 bg-gray-50/50 dark:bg-slate-800 text-gray-900 dark:text-white text-xs font-bold focus:outline-none transition-all cursor-pointer disabled:opacity-80 disabled:cursor-not-allowed"
+              disabled={!currentModalidad || filters.modalidad === 'EBE'}
+              className="w-full h-10 px-3 rounded-xl border border-gray-200 dark:border-slate-800 bg-gray-50/50 dark:bg-slate-800 text-gray-900 dark:text-white text-xs font-bold focus:outline-none transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              {filters.modalidad === 'EBE' ? (
-                <option value="—">—</option>
+              {!currentModalidad ? (
+                <option value="" disabled hidden className="text-gray-400">
+                  🔒 Primero selecciona modalidad
+                </option>
+              ) : filters.modalidad === 'EBE' ? (
+                <option value="—">No requiere nivel (EBE)</option>
               ) : (
                 <>
                   <option value="" disabled hidden className="text-gray-400">
@@ -270,16 +274,27 @@ export const CascadingFilters: React.FC<CascadingFiltersProps> = ({
             value={
               filters.modalidad === 'EBE' || (!isDirectivos && currentNivel && especialidadesDisponibles.length === 0)
                 ? '—'
-                : filters.especialidad && filters.especialidad !== 'TODOS'
-                ? filters.especialidad
-                : ''
+                : currentEspecialidad
             }
             onChange={(e) => handleEspecialidadChange(e.target.value)}
-            disabled={filters.modalidad === 'EBE' || (!isDirectivos && !!currentNivel && especialidadesDisponibles.length === 0)}
-            className="w-full h-10 px-3 rounded-xl border border-gray-200 dark:border-slate-800 bg-gray-50/50 dark:bg-slate-800 text-gray-900 dark:text-white text-xs font-bold focus:outline-none transition-all cursor-pointer disabled:opacity-80 disabled:cursor-not-allowed"
+            disabled={
+              !currentModalidad ||
+              (!isDirectivos && !currentNivel) ||
+              filters.modalidad === 'EBE' ||
+              (!isDirectivos && !!currentNivel && especialidadesDisponibles.length === 0)
+            }
+            className="w-full h-10 px-3 rounded-xl border border-gray-200 dark:border-slate-800 bg-gray-50/50 dark:bg-slate-800 text-gray-900 dark:text-white text-xs font-bold focus:outline-none transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            {filters.modalidad === 'EBE' || (!isDirectivos && currentNivel && especialidadesDisponibles.length === 0) ? (
-              <option value="—">—</option>
+            {!currentModalidad ? (
+              <option value="" disabled hidden className="text-gray-400">
+                🔒 Primero selecciona modalidad
+              </option>
+            ) : !isDirectivos && !currentNivel ? (
+              <option value="" disabled hidden className="text-gray-400">
+                🔒 Primero selecciona nivel
+              </option>
+            ) : filters.modalidad === 'EBE' || (!isDirectivos && currentNivel && especialidadesDisponibles.length === 0) ? (
+              <option value="—">No requiere especialidad (General)</option>
             ) : (
               <>
                 <option value="" disabled hidden className="text-gray-400">

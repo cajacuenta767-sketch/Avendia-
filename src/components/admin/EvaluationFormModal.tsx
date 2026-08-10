@@ -316,6 +316,58 @@ export const EvaluationFormModal: React.FC<EvaluationFormModalProps> = ({
             )}
           </div>
 
+          {/* Clasificación Obligatoria para Nombramiento Docente */}
+          {proceso === 'NOMBRAMIENTO_DOCENTE' && (
+            <div className="p-4 rounded-2xl bg-purple-50/70 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800 space-y-2">
+              <label className="text-xs font-black text-purple-900 dark:text-purple-300 uppercase tracking-wider block">
+                Clasificación Obligatoria para Nombramiento Docente *
+              </label>
+              <p className="text-[11px] text-purple-700 dark:text-purple-400">
+                Selecciona la categoría correspondiente para que el docente pueda filtrar el material adecuadamente.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                <label className={`flex items-center space-x-2.5 p-3 rounded-xl border cursor-pointer transition-all ${
+                  especialidad.toLowerCase().includes('habilidades generales') || especialidad.toLowerCase().includes('general')
+                    ? 'bg-purple-600 text-white border-purple-600 font-bold shadow-xs'
+                    : 'bg-white dark:bg-slate-900 border-gray-200 dark:border-slate-800 text-gray-700 dark:text-slate-300 hover:border-purple-300'
+                }`}>
+                  <input
+                    type="radio"
+                    name="categoriaNombramiento"
+                    checked={especialidad.toLowerCase().includes('habilidades generales') || especialidad.toLowerCase().includes('general')}
+                    onChange={() => setEspecialidad('Habilidades Generales')}
+                    className="accent-purple-600"
+                  />
+                  <div className="text-xs">
+                    <span className="font-extrabold block">🧠 Habilidades Generales</span>
+                    <span className="text-[10px] opacity-80 block">Comprensión Lectora / Razonamiento Lógico</span>
+                  </div>
+                </label>
+
+                <label className={`flex items-center space-x-2.5 p-3 rounded-xl border cursor-pointer transition-all ${
+                  !especialidad.toLowerCase().includes('habilidades generales') && !especialidad.toLowerCase().includes('general')
+                    ? 'bg-purple-600 text-white border-purple-600 font-bold shadow-xs'
+                    : 'bg-white dark:bg-slate-900 border-gray-200 dark:border-slate-800 text-gray-700 dark:text-slate-300 hover:border-purple-300'
+                }`}>
+                  <input
+                    type="radio"
+                    name="categoriaNombramiento"
+                    checked={!especialidad.toLowerCase().includes('habilidades generales') && !especialidad.toLowerCase().includes('general')}
+                    onChange={() => {
+                      const areasList = AREAS_POR_MODALIDAD_NIVEL[modalidad as ModalidadKey]?.[nivel] || [];
+                      setEspecialidad(areasList[0] || 'Matemática');
+                    }}
+                    className="accent-purple-600"
+                  />
+                  <div className="text-xs">
+                    <span className="font-extrabold block">📚 Conocimientos Curriculares</span>
+                    <span className="text-[10px] opacity-80 block">Pedagógicos y Especialidad Disciplinar</span>
+                  </div>
+                </label>
+              </div>
+            </div>
+          )}
+
           {/* Selector de Origen de Recursos (MINEDU / AVEND) */}
           <div className="p-4 rounded-2xl bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 space-y-3">
             <h4 className="text-xs font-extrabold uppercase text-gray-700 dark:text-gray-300">
