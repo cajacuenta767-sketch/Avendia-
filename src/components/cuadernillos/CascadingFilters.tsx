@@ -201,17 +201,13 @@ export const CascadingFilters: React.FC<CascadingFiltersProps> = ({
       return true;
     }
 
-    // 2. Niveles sin especialidad diferenciada (Ej. EBR Inicial, EBE, o niveles con lista vacia)
+    // 2. Nombramiento EBR Inicial (sin especialidad diferenciada)
     if (currentModalidad === 'EBR' && currentNivel === 'INICIAL') {
       return true;
     }
 
-    if (filters.modalidad === 'EBE' || (currentNivel && especialidadesDisponibles.length === 0)) {
-      return true;
-    }
-
     return false;
-  }, [activeProceso, currentModalidad, currentNivel, currentEspecialidad, filters.modalidad, especialidadesDisponibles]);
+  }, [activeProceso, currentModalidad, currentNivel, currentEspecialidad]);
 
   return (
     <section className="w-full space-y-3 bg-white dark:bg-slate-900 p-5 rounded-2xl border border-gray-200/80 dark:border-slate-800 shadow-2xs">
@@ -243,8 +239,12 @@ export const CascadingFilters: React.FC<CascadingFiltersProps> = ({
         </button>
       </div>
 
-      {/* Grid Adaptable de Selectores en Cascada */}
-      <div className={`grid grid-cols-1 sm:grid-cols-2 ${isDirectivos ? 'lg:grid-cols-3' : 'lg:grid-cols-4'} gap-3 pt-1`}>
+      {/* Grid Adaptable de Selectores en Cascada en la Barra Superior */}
+      <div
+        className={`grid grid-cols-1 sm:grid-cols-2 ${
+          isDirectivos ? 'lg:grid-cols-3' : showSubpruebasFilter ? 'lg:grid-cols-5' : 'lg:grid-cols-4'
+        } gap-3 pt-1`}
+      >
         {/* Paso 1: Modalidad */}
         <div className="space-y-1">
           <label className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-tight">
@@ -385,6 +385,28 @@ export const CascadingFilters: React.FC<CascadingFiltersProps> = ({
             )}
           </select>
         </div>
+
+        {/* Selector Integrado Compacto de Subprueba (Nombramiento Primaria / Inicial) */}
+        {showSubpruebasFilter && (
+          <div className="space-y-1 animate-in fade-in duration-300">
+            <label className="text-[10px] font-bold text-purple-600 dark:text-purple-400 uppercase tracking-tight flex items-center space-x-1">
+              <span>Subprueba</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse inline-block" />
+            </label>
+            <select
+              value={activeSubcategoria || 'HABILIDADES_GENERALES'}
+              onChange={(e) => onSubcategoriaChange?.(e.target.value as any)}
+              className="w-full h-10 px-3 rounded-xl border border-purple-300 dark:border-purple-800 bg-purple-50/60 dark:bg-purple-950/40 text-purple-900 dark:text-purple-200 text-xs font-bold focus:outline-none transition-all cursor-pointer shadow-2xs"
+            >
+              <option value="HABILIDADES_GENERALES">
+                Habilidades Generales
+              </option>
+              <option value="CONOCIMIENTOS_CURRICULARES">
+                Conocimiento Curriculares y Pedagógicos
+              </option>
+            </select>
+          </div>
+        )}
       </div>
 
       {/* Banner Informativo Dinámico de Selección Activa */}
@@ -404,48 +426,6 @@ export const CascadingFilters: React.FC<CascadingFiltersProps> = ({
           <span>. Revisa los cuadernillos disponibles.</span>
         </div>
       </div>
-
-      {/* Bloque de Filtrado Condicional Reutilizado (Nombramiento -> Niveles Generales o Especiales) */}
-      {showSubpruebasFilter && (
-        <div className="mt-3 p-4 rounded-2xl bg-purple-50/80 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800/80 space-y-2.5 animate-in fade-in duration-300 shadow-2xs">
-          <div className="flex items-center space-x-2">
-            <span className="w-2 h-2 rounded-full bg-purple-600 animate-pulse" />
-            <span className="text-xs font-black uppercase text-purple-900 dark:text-purple-300 tracking-wider">
-              Filtro Específico de Subpruebas ({procesoNombre} {nivelTextoLabel || currentModalidad})
-            </span>
-          </div>
-          <p className="text-[11px] text-purple-700 dark:text-purple-400">
-            Selecciona la categoría evaluativa para segmentar los cuadernillos disponibles:
-          </p>
-
-          <div className="flex flex-wrap items-center gap-2 pt-1">
-            <button
-              type="button"
-              onClick={() => onSubcategoriaChange?.('HABILIDADES_GENERALES')}
-              className={`px-4 py-2.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center space-x-2 ${
-                activeSubcategoria === 'HABILIDADES_GENERALES'
-                  ? 'bg-purple-600 text-white shadow-md shadow-purple-500/20'
-                  : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-purple-200 dark:border-purple-800 hover:bg-purple-50 dark:hover:bg-purple-900/40'
-              }`}
-            >
-              <span className="text-sm">🧠</span>
-              <span>Habilidades Generales</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => onSubcategoriaChange?.('CONOCIMIENTOS_CURRICULARES')}
-              className={`px-4 py-2.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center space-x-2 ${
-                activeSubcategoria === 'CONOCIMIENTOS_CURRICULARES' || activeSubcategoria === 'TODOS'
-                  ? 'bg-purple-600 text-white shadow-md shadow-purple-500/20'
-                  : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-purple-200 dark:border-purple-800 hover:bg-purple-50 dark:hover:bg-purple-900/40'
-              }`}
-            >
-              <span className="text-sm">📚</span>
-              <span>Conocimiento Curriculares y Pedagógicos</span>
-            </button>
-          </div>
-        </div>
-      )}
     </section>
   );
 };
