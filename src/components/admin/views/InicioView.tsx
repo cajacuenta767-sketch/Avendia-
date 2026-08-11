@@ -21,6 +21,35 @@ export const InicioView: React.FC<InicioViewProps> = ({ onNavigateTab }) => {
   const [loading, setLoading] = useState(true);
   const [permisoMetricas, setPermisoMetricas] = useState(true);
 
+  const [currentTime, setCurrentTime] = useState<string>('');
+  const [currentDate, setCurrentDate] = useState<string>('');
+
+  useEffect(() => {
+    const updateTime = () => {
+      const now = new Date();
+      setCurrentTime(
+        now.toLocaleTimeString('es-PE', {
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: true,
+        })
+      );
+      setCurrentDate(
+        now.toLocaleDateString('es-PE', {
+          weekday: 'long',
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+        })
+      );
+    };
+
+    updateTime();
+    const interval = setInterval(updateTime, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
   useEffect(() => {
     async function loadStats() {
       const res = await getDashboardStatsAction();
@@ -47,14 +76,35 @@ export const InicioView: React.FC<InicioViewProps> = ({ onNavigateTab }) => {
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto pb-12">
-      {/* Saludo Banner */}
-      <div>
-        <h2 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">
-          ¡Bienvenido de nuevo, Administrador!
-        </h2>
-        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-          Resumen general de actividad, licencias y materiales cargados en AVEND ESCALA.
-        </p>
+      {/* Saludo Banner con Reloj en Tiempo Real y Fecha Actual */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-6 rounded-3xl border border-gray-100 dark:border-slate-800 shadow-2xs">
+        <div>
+          <span className="text-[10px] font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+            SISTEMA DE GESTIÓN Y TRAZABILIDAD AVEND
+          </span>
+          <h2 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight mt-0.5">
+            ¡Bienvenido de nuevo, Administrador!
+          </h2>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+            Resumen general de actividad, licencias y materiales cargados en AVEND ESCALA.
+          </p>
+        </div>
+
+        <div className="flex items-center space-x-3 bg-indigo-50/70 dark:bg-slate-800 p-3.5 rounded-2xl border border-indigo-100 dark:border-slate-700 shrink-0">
+          <div className="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center text-white shrink-0 shadow-2xs">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <div>
+            <span className="text-xs font-black text-slate-900 dark:text-white block tracking-wide font-mono">
+              ⏰ {currentTime || 'Cargando hora...'}
+            </span>
+            <span className="text-[10px] font-bold text-indigo-700 dark:text-indigo-300 capitalize block">
+              📅 {currentDate || 'Cargando fecha...'}
+            </span>
+          </div>
+        </div>
       </div>
 
       {/* 4 Tarjetas de Métricas Top (Controladas por Módulo 4: permisoMetricas) */}

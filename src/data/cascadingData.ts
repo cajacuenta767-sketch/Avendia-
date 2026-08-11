@@ -35,16 +35,11 @@ export const NIVELES_POR_MODALIDAD: Record<ModalidadKey, NivelOption[]> = {
 
 export const AREAS_POR_MODALIDAD_NIVEL: Record<ModalidadKey, Record<string, string[]>> = {
   EBR: {
-    INICIAL: [
-      'Habilidades Generales',
-      'Conocimiento Curriculares y Pedagógicos',
-    ],
+    INICIAL: [],
     PRIMARIA: [
-      'Habilidades Generales',
-      'Conocimiento Curriculares y Pedagógicos',
-      'Primaria',
       'Educación Física',
-      'Innovación Pedagógica',
+      'Primaria',
+      'Profesor de Innovación Pedagógica',
     ],
     SECUNDARIA: [
       'Habilidades Generales',

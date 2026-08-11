@@ -15,6 +15,8 @@ interface CascadingFiltersProps {
   onResetFilters: () => void;
   resultsCount?: number;
   activeProceso?: ProcesoMinedu;
+  activeSubcategoria?: string;
+  onSubcategoriaChange?: (sub: 'TODOS' | 'HABILIDADES_GENERALES' | 'CONOCIMIENTOS_CURRICULARES') => void;
 }
 
 import {
@@ -87,6 +89,8 @@ export const CascadingFilters: React.FC<CascadingFiltersProps> = ({
   onResetFilters,
   resultsCount,
   activeProceso = 'NOMBRAMIENTO_DOCENTE',
+  activeSubcategoria = 'TODOS',
+  onSubcategoriaChange,
 }) => {
   const isDirectivos = activeProceso === 'ACCESO_CARGOS_DIRECTIVOS';
 
@@ -178,6 +182,37 @@ export const CascadingFilters: React.FC<CascadingFiltersProps> = ({
 
   const nivelTextoLabel = nivelesDisponibles.find((n) => n.value === currentNivel)?.label;
 
+  const isEspecialidadComplete = useMemo(() => {
+    if (!currentModalidad) return false;
+    if (isDirectivos) return !!currentEspecialidad;
+    if (!currentNivel) return false;
+    if (filters.modalidad === 'EBE' || (currentNivel && especialidadesDisponibles.length === 0)) {
+      return true;
+    }
+    return !!currentEspecialidad;
+  }, [currentModalidad, currentNivel, currentEspecialidad, isDirectivos, filters.modalidad, especialidadesDisponibles]);
+
+  const showSubpruebasFilter = useMemo(() => {
+    if (activeProceso !== 'NOMBRAMIENTO_DOCENTE') return false;
+    if (!currentModalidad) return false;
+
+    // 1. Nombramiento EBR Primaria -> Primaria
+    if (currentModalidad === 'EBR' && currentNivel === 'PRIMARIA' && currentEspecialidad.toLowerCase().trim() === 'primaria') {
+      return true;
+    }
+
+    // 2. Niveles sin especialidad diferenciada (Ej. EBR Inicial, EBE, o niveles con lista vacia)
+    if (currentModalidad === 'EBR' && currentNivel === 'INICIAL') {
+      return true;
+    }
+
+    if (filters.modalidad === 'EBE' || (currentNivel && especialidadesDisponibles.length === 0)) {
+      return true;
+    }
+
+    return false;
+  }, [activeProceso, currentModalidad, currentNivel, currentEspecialidad, filters.modalidad, especialidadesDisponibles]);
+
   return (
     <section className="w-full space-y-3 bg-white dark:bg-slate-900 p-5 rounded-2xl border border-gray-200/80 dark:border-slate-800 shadow-2xs">
       {/* Encabezado del Paso 2 */}
@@ -191,7 +226,7 @@ export const CascadingFilters: React.FC<CascadingFiltersProps> = ({
               Completa los datos
             </h2>
             <p className="text-[11px] text-gray-400 dark:text-slate-500">
-              Las opciones cambian según cada selección.
+              Las opciones se desbloquean en orden secuencial según cada selección.
             </p>
           </div>
         </div>
@@ -210,7 +245,7 @@ export const CascadingFilters: React.FC<CascadingFiltersProps> = ({
 
       {/* Grid Adaptable de Selectores en Cascada */}
       <div className={`grid grid-cols-1 sm:grid-cols-2 ${isDirectivos ? 'lg:grid-cols-3' : 'lg:grid-cols-4'} gap-3 pt-1`}>
-        {/* Cuadro 1: Modalidad */}
+        {/* Paso 1: Modalidad */}
         <div className="space-y-1">
           <label className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-tight">
             Modalidad
@@ -231,7 +266,7 @@ export const CascadingFilters: React.FC<CascadingFiltersProps> = ({
           </select>
         </div>
 
-        {/* Cuadro 2: Nivel Educativo */}
+        {/* Paso 2: Nivel Educativo */}
         {!isDirectivos && (
           <div className="space-y-1">
             <label className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-tight">
@@ -265,7 +300,7 @@ export const CascadingFilters: React.FC<CascadingFiltersProps> = ({
           </div>
         )}
 
-        {/* Cuadro 3: Cargo o Especialidad */}
+        {/* Paso 3: Cargo o Especialidad */}
         <div className="space-y-1">
           <label className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-tight">
             {isDirectivos ? 'Cargo a Postular (MINEDU)' : 'Área o especialidad'}
@@ -313,7 +348,7 @@ export const CascadingFilters: React.FC<CascadingFiltersProps> = ({
           </select>
         </div>
 
-        {/* Cuadro 4: Año de Evaluación */}
+        {/* Paso 4: Año de Evaluación */}
         <div className="space-y-1">
           <label className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-tight">
             Año
@@ -321,16 +356,33 @@ export const CascadingFilters: React.FC<CascadingFiltersProps> = ({
           <select
             value={filters.anio && filters.anio !== 'TODOS' ? String(filters.anio) : ''}
             onChange={(e) => handleAnioChange(e.target.value)}
-            className="w-full h-10 px-3 rounded-xl border border-gray-200 dark:border-slate-800 bg-gray-50/50 dark:bg-slate-800 text-gray-900 dark:text-white text-xs font-bold focus:outline-none transition-all cursor-pointer"
+            disabled={!isEspecialidadComplete}
+            className="w-full h-10 px-3 rounded-xl border border-gray-200 dark:border-slate-800 bg-gray-50/50 dark:bg-slate-800 text-gray-900 dark:text-white text-xs font-bold focus:outline-none transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            <option value="" disabled hidden className="text-gray-400">
-              Selecciona el año
-            </option>
-            {ANIOS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
+            {!currentModalidad ? (
+              <option value="" disabled hidden className="text-gray-400">
+                🔒 Primero selecciona modalidad
               </option>
-            ))}
+            ) : !isDirectivos && !currentNivel ? (
+              <option value="" disabled hidden className="text-gray-400">
+                🔒 Primero selecciona nivel
+              </option>
+            ) : !isEspecialidadComplete ? (
+              <option value="" disabled hidden className="text-gray-400">
+                🔒 Primero selecciona área o especialidad
+              </option>
+            ) : (
+              <>
+                <option value="" disabled hidden className="text-gray-400">
+                  Selecciona el año
+                </option>
+                {ANIOS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </>
+            )}
           </select>
         </div>
       </div>
@@ -347,10 +399,53 @@ export const CascadingFilters: React.FC<CascadingFiltersProps> = ({
           <span className="font-bold">
             {procesoNombre} - {currentModalidad}
             {!isDirectivos && nivelTextoLabel ? ` - ${nivelTextoLabel}` : ''}
+            {currentEspecialidad && currentEspecialidad !== '—' ? ` - ${currentEspecialidad}` : ''}
           </span>
           <span>. Revisa los cuadernillos disponibles.</span>
         </div>
       </div>
+
+      {/* Bloque de Filtrado Condicional Reutilizado (Nombramiento -> Niveles Generales o Especiales) */}
+      {showSubpruebasFilter && (
+        <div className="mt-3 p-4 rounded-2xl bg-purple-50/80 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800/80 space-y-2.5 animate-in fade-in duration-300 shadow-2xs">
+          <div className="flex items-center space-x-2">
+            <span className="w-2 h-2 rounded-full bg-purple-600 animate-pulse" />
+            <span className="text-xs font-black uppercase text-purple-900 dark:text-purple-300 tracking-wider">
+              Filtro Específico de Subpruebas ({procesoNombre} {nivelTextoLabel || currentModalidad})
+            </span>
+          </div>
+          <p className="text-[11px] text-purple-700 dark:text-purple-400">
+            Selecciona la categoría evaluativa para segmentar los cuadernillos disponibles:
+          </p>
+
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <button
+              type="button"
+              onClick={() => onSubcategoriaChange?.('HABILIDADES_GENERALES')}
+              className={`px-4 py-2.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center space-x-2 ${
+                activeSubcategoria === 'HABILIDADES_GENERALES'
+                  ? 'bg-purple-600 text-white shadow-md shadow-purple-500/20'
+                  : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-purple-200 dark:border-purple-800 hover:bg-purple-50 dark:hover:bg-purple-900/40'
+              }`}
+            >
+              <span className="text-sm">🧠</span>
+              <span>Habilidades Generales</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onSubcategoriaChange?.('CONOCIMIENTOS_CURRICULARES')}
+              className={`px-4 py-2.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center space-x-2 ${
+                activeSubcategoria === 'CONOCIMIENTOS_CURRICULARES' || activeSubcategoria === 'TODOS'
+                  ? 'bg-purple-600 text-white shadow-md shadow-purple-500/20'
+                  : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-purple-200 dark:border-purple-800 hover:bg-purple-50 dark:hover:bg-purple-900/40'
+              }`}
+            >
+              <span className="text-sm">📚</span>
+              <span>Conocimiento Curriculares y Pedagógicos</span>
+            </button>
+          </div>
+        </div>
+      )}
     </section>
   );
 };
