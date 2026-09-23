@@ -17,7 +17,7 @@ export const AdminUserFormModal: React.FC<AdminUserFormModalProps> = ({
   onClose,
   onSuccess,
   adminToEdit = null,
-  creatorName = 'Juan Avend',
+  creatorName = 'Administrador',
 }) => {
   const [nombre, setNombre] = useState('');
   const [email, setEmail] = useState('');
@@ -121,8 +121,8 @@ export const AdminUserFormModal: React.FC<AdminUserFormModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-xs animate-in fade-in">
-      <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-lg w-full border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden max-h-[92vh] flex flex-col">
+    <div className="responsive-modal-shell fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-3 sm:p-4 backdrop-blur-xs animate-in fade-in">
+      <div className="responsive-modal-panel bg-white dark:bg-slate-900 rounded-3xl max-w-lg w-full border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden max-h-[92dvh] flex flex-col">
         {/* Header del Modal */}
         <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/60 dark:bg-slate-900">
           <div className="space-y-0.5">

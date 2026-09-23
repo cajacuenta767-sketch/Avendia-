@@ -2,6 +2,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { formatEvaluationTitle } from '@/lib/evaluationPresentation';
 import {
   getCuadernillosAction,
   crearCuadernilloAction,
@@ -27,8 +28,8 @@ const NIVELES_POR_MODALIDAD: Record<string, { value: string; label: string }[]> 
 };
 
 const AREAS_POR_NIVEL: Record<string, string[]> = {
-  INICIAL: ['Educación Inicial', 'AIP / Aula de Innovación Pedagógica'],
-  PRIMARIA: ['Educación Primaria', 'Educación Física', 'AIP / Aula de Innovación Pedagógica'],
+  INICIAL: ['Educación Inicial'],
+  PRIMARIA: ['Educación Primaria', 'Educación Física', 'Profesor de Innovación Pedagógica'],
   SECUNDARIA: [
     'Matemática',
     'Comunicación',
@@ -40,7 +41,7 @@ const AREAS_POR_NIVEL: Record<string, string[]> = {
     'Educación para el Trabajo (EPT)',
     'Arte y Cultura',
     'Educación Religiosa',
-    'AIP / Aula de Innovación Pedagógica',
+    'Profesor de Innovación Pedagógica',
   ],
   NO_APLICA: ['No Aplica / Cargos Directivos', 'Directivos de IE', 'Especialistas de DRE/UGEL'],
 };
@@ -286,11 +287,11 @@ export const CuadernillosView: React.FC = () => {
                 {items.map((item) => (
                   <tr key={item.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors">
                     <td className="px-5 py-4 font-bold text-slate-900 dark:text-white max-w-xs truncate">
-                      {item.titulo}
+                      {formatEvaluationTitle(item.titulo)}
                     </td>
                     <td className="px-4 py-4">
                       <span className="px-2.5 py-1 bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 rounded-lg text-[11px] font-extrabold">
-                        {item.proceso}
+                        {formatEvaluationTitle(item.proceso)}
                       </span>
                     </td>
                     <td className="px-4 py-4 text-slate-600 dark:text-slate-400">
@@ -353,7 +354,7 @@ export const CuadernillosView: React.FC = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block font-extrabold text-slate-700 dark:text-slate-300 mb-1">Proceso</label>
                   <select
@@ -387,7 +388,7 @@ export const CuadernillosView: React.FC = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block font-extrabold text-slate-700 dark:text-slate-300 mb-1">Nivel</label>
                   <select
@@ -502,7 +503,7 @@ export const CuadernillosView: React.FC = () => {
               ¿Eliminar cuadernillo?
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Se eliminará físicamente de PostgreSQL el cuadernillo <strong className="text-slate-800 dark:text-slate-200">{deleteModal.titulo}</strong>.
+              Se eliminará físicamente de PostgreSQL el cuadernillo <strong className="text-slate-800 dark:text-slate-200">{formatEvaluationTitle(deleteModal.titulo)}</strong>.
             </p>
 
             <div className="flex items-center justify-center space-x-3 pt-2">

@@ -2,7 +2,8 @@
 // AVEND ESCALA - MINEDU Evaluation Bank & Simulator Schema
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x", "linux-musl"]
 }
 
 datasource db {
@@ -203,6 +204,7 @@ model Evaluacion {
   modalidad         String
   nivel             String
   area              String
+  tipoCuadernillo   String?
   anio              String
   urlCuadernillo    String?
   urlResolucion     String?
@@ -213,6 +215,7 @@ model Evaluacion {
   codigoCuadernillo String?
   codigoResolucion  String?
   codigoClaves      String?
+  estado            String   @default("PUBLICADO")
   esPremium         Boolean  @default(false)
   createdAt         DateTime @default(now())
 
@@ -228,15 +231,19 @@ model AnioClasificacion {
 
 model UsuarioDocente {
   id            String   @id @default(cuid())
-  dni           String   @unique
+  dni           String?
   nombre        String
   email         String   @unique
   pin           String
   rol           String   @default("DOCENTE")
-  modalidad     String?  @default("EBR")
-  nivel         String?  @default("INICIAL")
-  areas         String?  @default("[]")
+  modalidad            String?  @default("EBR")
+  nivel                String?  @default("INICIAL")
+  region               String?
+  institucionEducativa String?
+  areas                String?  @default("[]")
   tiposAcceso   String?  @default("[\"Ascenso\",\"Nombramiento\",\"Directivo\"]")
+  accesoGranted Boolean? @default(true)
+  observacion   String?
   creadoPor     String?  @default("Juan Avend")
   modificadoPor String?  @default("Juan Avend")
   fechaInicio   DateTime @default(now())
@@ -266,3 +273,27 @@ model AdminUser {
 
   @@map("admin_users")
 }
+
+model NotificacionAdmin {
+  id            String   @id @default(cuid())
+  tipo          String   @default("RECURSO_FALTANTE")
+  titulo        String
+  mensaje       String
+  tipoRecurso   String   // CUADERNILLO | RESOLUCION | CLAVES | RECURSO_PDF
+  evaluacionId  String?
+  proceso       String?
+  modalidad     String?
+  nivel         String?
+  area          String?
+  anio          String?
+  codigo        String?
+  docenteNombre String?
+  docenteEmail  String?
+  leido         Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([leido, createdAt])
+  @@map("notificaciones_admin")
+}
+

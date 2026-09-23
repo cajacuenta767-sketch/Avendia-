@@ -1,0 +1,16 @@
+{
+  "$schema": "https://raw.githubusercontent.com/TestSprite/testsprite-cli/v0.7.0/schemas/plan.schema.json",
+  "projectId": "c83c6336-38d5-42ed-a742-0c24077b6964",
+  "type": "frontend",
+  "name": "14 - Vigencias: Banner Superior Fijo con Reloj Digital de 24 Horas",
+  "planSteps": [
+    {
+      "type": "action",
+      "description": "Iniciar sesión en https://cuadernillos.avend.pe/cuadernillos con un usuario con rol 'PRUEBA_GRATIS_24H'."
+    },
+    {
+      "type": "assertion",
+      "description": "Verificar que se despliegue en el encabezado la barra fija de color naranja mostrando el reloj digital 'HH:MM:SS' descontando el tiempo en vivo cada segundo."
+    }
+  ]
+}

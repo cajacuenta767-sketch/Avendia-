@@ -11,6 +11,22 @@ export type ActionResponse<T> =
   | { success: false; error: { code: string; message: string } };
 
 import { OFFICIAL_ADMIN_ACCOUNTS, AdminAccount } from '@/data/adminAccounts';
+import { requireAdminSession, setServerSession } from '@/lib/serverSession';
+import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
+
+function hashSecret(value: string): string {
+  const salt = randomBytes(16).toString('hex');
+  return `scrypt$${salt}$${scryptSync(value, salt, 32).toString('hex')}`;
+}
+
+function verifySecret(value: string, stored: string): boolean {
+  if (!stored.startsWith('scrypt$')) return stored === value;
+  const [, salt, digest] = stored.split('$');
+  if (!salt || !digest) return false;
+  const expected = Buffer.from(digest, 'hex');
+  const actual = scryptSync(value, salt, expected.length);
+  return expected.length === actual.length && timingSafeEqual(expected, actual);
+}
 
 export type { AdminAccount };
 
@@ -34,11 +50,11 @@ export interface AdminUserItem {
 // Lista Oficial Inicial de Administradores
 const INITIAL_ADMIN_ACCOUNTS: AdminUserItem[] = [
   {
-    id: 'admin-super-juan',
-    nombre: 'Juan Avend',
+    id: 'admin-super-bryan',
+    nombre: 'Bryan',
     email: 'cajacuenta767@gmail.com',
     usuario: 'cajacuenta767',
-    password: '987654',
+    password: undefined,
     rol: 'SUPERADMINISTRADOR',
     estado: 'ACTIVO',
     permisoUsuarios: true,
@@ -49,104 +65,67 @@ const INITIAL_ADMIN_ACCOUNTS: AdminUserItem[] = [
     createdAt: new Date().toISOString(),
   },
   {
-    id: 'admin-01',
-    nombre: 'Administrador 01',
-    email: 'administrador@avend.pe',
-    usuario: 'admin01',
-    password: '123456',
-    rol: 'ADMINISTRADOR',
+    id: 'admin-super-avendoficial',
+    nombre: 'Superadministrador AVEND',
+    email: 'avendoficial@gmail.com',
+    usuario: 'avendoficial',
+    password: undefined,
+    rol: 'SUPERADMINISTRADOR',
     estado: 'ACTIVO',
     permisoUsuarios: true,
     permisoCuadernillos: true,
     permisoRecursos: true,
     permisoMetricas: true,
-    creadoPor: 'Juan Avend',
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: 'admin-02',
-    nombre: 'Carlos Mendoza (Soporte)',
-    email: 'soporte@avend.pe',
-    usuario: 'carlos.mendoza',
-    password: '2026',
-    rol: 'ADMINISTRADOR',
-    estado: 'ACTIVO',
-    permisoUsuarios: true,
-    permisoCuadernillos: false,
-    permisoRecursos: false,
-    permisoMetricas: true,
-    creadoPor: 'Juan Avend',
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: 'admin-03',
-    nombre: 'María Fernanda (MINEDU)',
-    email: 'evaluaciones@avend.pe',
-    usuario: 'maria.fernanda',
-    password: '2026',
-    rol: 'ADMINISTRADOR',
-    estado: 'ACTIVO',
-    permisoUsuarios: false,
-    permisoCuadernillos: true,
-    permisoRecursos: true,
-    permisoMetricas: false,
-    creadoPor: 'Juan Avend',
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: 'admin-04',
-    nombre: 'Diego Ramírez (Auditor)',
-    email: 'auditoria@avend.pe',
-    usuario: 'diego.ramirez',
-    password: '2026',
-    rol: 'ADMINISTRADOR',
-    estado: 'ACTIVO',
-    permisoUsuarios: false,
-    permisoCuadernillos: false,
-    permisoRecursos: false,
-    permisoMetricas: true,
-    creadoPor: 'Juan Avend',
+    creadoPor: 'Sistema AVEND',
     createdAt: new Date().toISOString(),
   },
 ];
 
 export async function getOfficialAdminAccountsAction(): Promise<ActionResponse<AdminAccount[]>> {
-  return { success: true, data: OFFICIAL_ADMIN_ACCOUNTS };
+  try {
+    requireAdminSession();
+    return { success: true, data: OFFICIAL_ADMIN_ACCOUNTS.map(({ userOrEmail, name, role }) => ({ userOrEmail, name, role, passOrPin: [] })) };
+  } catch {
+    return { success: false, error: { code: 'UNAUTHORIZED', message: 'Acceso denegado.' } };
+  }
 }
 
 /**
- * Obtener todos los Administradores desde la Base de Datos PostgreSQL (con fallback a lista inicial)
+ * Obtener Administradores Secundarios desde la Base de Datos (excluyendo a los Superadministradores)
  */
 export async function getAdminUsersAction(): Promise<ActionResponse<AdminUserItem[]>> {
   try {
+    requireAdminSession('usuarios');
     const dbAdmins = await prisma.adminUser.findMany({
+      where: {
+        AND: [
+          { rol: { not: 'SUPERADMINISTRADOR' } },
+          { email: { notIn: ['cajacuenta767@gmail.com', 'avendoficial@gmail.com'] } },
+          { usuario: { notIn: ['cajacuenta767', 'avendoficial'] } },
+        ],
+      },
       orderBy: { createdAt: 'desc' },
     });
 
-    if (dbAdmins && dbAdmins.length > 0) {
-      const list: AdminUserItem[] = dbAdmins.map((item) => ({
-        id: item.id,
-        nombre: item.nombre,
-        email: item.email,
-        usuario: item.usuario,
-        password: item.password,
-        rol: item.rol,
-        estado: item.estado as 'ACTIVO' | 'PAUSADO',
-        permisoUsuarios: item.permisoUsuarios,
-        permisoCuadernillos: item.permisoCuadernillos,
-        permisoRecursos: item.permisoRecursos,
-        permisoMetricas: item.permisoMetricas,
-        creadoPor: item.creadoPor || 'Juan Avend',
-        modificadoPor: item.modificadoPor || 'Juan Avend',
-        createdAt: item.createdAt.toISOString(),
-      }));
-      return { success: true, data: list };
-    }
-
-    return { success: true, data: INITIAL_ADMIN_ACCOUNTS };
-  } catch (error: any) {
+    const list: AdminUserItem[] = (dbAdmins || []).map((item) => ({
+      id: item.id,
+      nombre: item.nombre,
+      email: item.email,
+      usuario: item.usuario,
+      rol: item.rol,
+      estado: item.estado as 'ACTIVO' | 'PAUSADO',
+      permisoUsuarios: item.permisoUsuarios,
+      permisoCuadernillos: item.permisoCuadernillos,
+      permisoRecursos: item.permisoRecursos,
+      permisoMetricas: item.permisoMetricas,
+      creadoPor: item.creadoPor || 'Sistema AVEND',
+      modificadoPor: item.modificadoPor || item.creadoPor || 'Sistema AVEND',
+      createdAt: item.createdAt.toISOString(),
+    }));
+    return { success: true, data: list };
+  } catch (error: unknown) {
     console.error('❌ [GET ADMIN USERS ERROR]:', error);
-    return { success: true, data: INITIAL_ADMIN_ACCOUNTS };
+    return { success: false, error: { code: 'GET_ADMIN_USERS_FAILED', message: 'No se pudo recuperar el equipo administrativo.' } };
   }
 }
 
@@ -166,6 +145,7 @@ export async function createAdminUserAction(data: {
   creadoPor?: string;
 }): Promise<ActionResponse<{ id: string }>> {
   try {
+    requireAdminSession('usuarios');
     const cleanNombre = (data.nombre || '').trim();
     const cleanEmail = (data.email || '').trim().toLowerCase();
     const cleanUsuario = (data.usuario || '').trim().toLowerCase();
@@ -180,15 +160,15 @@ export async function createAdminUserAction(data: {
         nombre: cleanNombre,
         email: cleanEmail,
         usuario: cleanUsuario,
-        password: cleanPassword,
+        password: hashSecret(cleanPassword),
         rol: data.rol || 'ADMINISTRADOR',
         estado: 'ACTIVO',
         permisoUsuarios: Boolean(data.permisoUsuarios ?? true),
         permisoCuadernillos: Boolean(data.permisoCuadernillos ?? true),
         permisoRecursos: Boolean(data.permisoRecursos ?? true),
         permisoMetricas: Boolean(data.permisoMetricas ?? true),
-        creadoPor: data.creadoPor || 'Juan Avend',
-        modificadoPor: data.creadoPor || 'Juan Avend',
+        creadoPor: data.creadoPor || 'Superadministrador AVEND',
+        modificadoPor: data.creadoPor || 'Superadministrador AVEND',
       },
     });
 
@@ -219,13 +199,14 @@ export async function updateAdminUserAction(
   }
 ): Promise<ActionResponse<{ id: string }>> {
   try {
+    requireAdminSession('usuarios');
     const updated = await prisma.adminUser.update({
       where: { id },
       data: {
         ...(data.nombre && { nombre: data.nombre.trim() }),
         ...(data.email && { email: data.email.trim().toLowerCase() }),
         ...(data.usuario && { usuario: data.usuario.trim().toLowerCase() }),
-        ...(data.password && { password: data.password.trim() }),
+        ...(data.password && { password: hashSecret(data.password.trim()) }),
         ...(data.rol && { rol: data.rol }),
         ...(data.estado && { estado: data.estado }),
         ...(data.permisoUsuarios !== undefined && { permisoUsuarios: data.permisoUsuarios }),
@@ -248,6 +229,7 @@ export async function updateAdminUserAction(
  */
 export async function deleteAdminUserAction(id: string): Promise<ActionResponse<{ id: string }>> {
   try {
+    requireAdminSession('usuarios');
     await prisma.adminUser.delete({ where: { id } });
     return { success: true, data: { id } };
   } catch (error: any) {
@@ -278,17 +260,18 @@ export async function verifyAdminCredentialsAction(
 
     // 1. Probar contra base de datos PostgreSQL filtrando estrictamente por usuario/email si se proporciona
     try {
-      const whereClause: any = {
-        password: cleanPass,
-        estado: 'ACTIVO',
-      };
+      const whereClause: any = { estado: 'ACTIVO' };
       if (cleanUser) {
         whereClause.OR = [{ email: cleanUser }, { usuario: cleanUser }];
       }
 
       const dbAdmin = await prisma.adminUser.findFirst({ where: whereClause });
 
-      if (dbAdmin) {
+      if (dbAdmin && verifySecret(cleanPass, dbAdmin.password)) {
+        if (!dbAdmin.password.startsWith('scrypt$')) {
+          await prisma.adminUser.update({ where: { id: dbAdmin.id }, data: { password: hashSecret(cleanPass) } });
+        }
+        setServerSession({ sub: dbAdmin.id, email: dbAdmin.email, role: dbAdmin.rol, permissions: { usuarios: dbAdmin.permisoUsuarios, cuadernillos: dbAdmin.permisoCuadernillos, recursos: dbAdmin.permisoRecursos, metricas: dbAdmin.permisoMetricas } });
         return {
           success: true,
           data: {
@@ -313,11 +296,12 @@ export async function verifyAdminCredentialsAction(
           acc.passOrPin.includes(cleanPass)
       );
 
-      if (matchedByEmail) {
+        if (matchedByEmail) {
         const matchedAccount = INITIAL_ADMIN_ACCOUNTS.find(
           (acc) => acc.email.toLowerCase() === matchedByEmail.userOrEmail[0].toLowerCase()
         );
 
+        setServerSession({ sub: matchedAccount?.id || 'official-admin', email: matchedByEmail.userOrEmail[0], role: matchedByEmail.role, permissions: { usuarios: true, cuadernillos: true, recursos: true, metricas: true } });
         return {
           success: true,
           data: {
@@ -344,6 +328,7 @@ export async function verifyAdminCredentialsAction(
         (acc) => acc.email.toLowerCase() === matchedOfficial.userOrEmail[0].toLowerCase()
       );
 
+      setServerSession({ sub: matchedAccount?.id || 'official-admin', email: matchedOfficial.userOrEmail[0], role: matchedOfficial.role, permissions: { usuarios: true, cuadernillos: true, recursos: true, metricas: true } });
       return {
         success: true,
         data: {
@@ -413,7 +398,12 @@ export async function checkIsAdminEmailAction(email: string): Promise<{ isAdmin:
  * Verificación estricta de seguridad
  */
 export async function verifyAdminSession(): Promise<boolean> {
-  return true;
+  try {
+    requireAdminSession();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -421,13 +411,7 @@ export async function verifyAdminSession(): Promise<boolean> {
  */
 export async function getAdminEvaluacionesAction(): Promise<ActionResponse<Evaluacion[]>> {
   try {
-    const isAdmin = await verifyAdminSession();
-    if (!isAdmin) {
-      return {
-        success: false,
-        error: { code: 'UNAUTHORIZED_ROLE', message: 'Acceso denegado. Se requiere rol ADMIN.' },
-      };
-    }
+    requireAdminSession('cuadernillos');
 
     try {
       const dbEvaluations = await prisma.evaluation.findMany({
@@ -479,6 +463,7 @@ export interface CreateEvaluationInput {
   modalidad: ModalidadEducativa;
   nivel: NivelEducativo;
   especialidad: string;
+  tipoCuadernillo?: string;
   anio: number;
   cuadernilloKey: string;
   resolucionKey?: string;
@@ -495,13 +480,7 @@ export async function createEvaluationAction(
   input: CreateEvaluationInput
 ): Promise<ActionResponse<Evaluacion>> {
   try {
-    const isAdmin = await verifyAdminSession();
-    if (!isAdmin) {
-      return {
-        success: false,
-        error: { code: 'UNAUTHORIZED_ROLE', message: 'Se requiere rol ADMIN para crear material.' },
-      };
-    }
+    requireAdminSession('cuadernillos');
 
     const newEval: Evaluacion = {
       id: `eval-${Date.now()}`,
@@ -540,13 +519,7 @@ export async function createEvaluationAction(
  */
 export async function deleteEvaluationAction(id: string): Promise<ActionResponse<{ deletedId: string }>> {
   try {
-    const isAdmin = await verifyAdminSession();
-    if (!isAdmin) {
-      return {
-        success: false,
-        error: { code: 'UNAUTHORIZED_ROLE', message: 'Se requiere rol ADMIN para eliminar material.' },
-      };
-    }
+    requireAdminSession('cuadernillos');
 
     const index = MOCK_EVALUACIONES.findIndex((item) => item.id === id);
     if (index !== -1) {
@@ -571,18 +544,12 @@ export async function generateR2UploadUrlAction(
   contentType: string = 'application/pdf'
 ): Promise<ActionResponse<{ uploadUrl: string; key: string }>> {
   try {
-    const isAdmin = await verifyAdminSession();
-    if (!isAdmin) {
-      return {
-        success: false,
-        error: { code: 'UNAUTHORIZED_ROLE', message: 'Se requiere rol ADMIN para subir archivos.' },
-      };
-    }
+    requireAdminSession('cuadernillos');
 
     const sanitizeName = fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
     const key = `evaluations/${Date.now()}_${sanitizeName}`;
 
-    const uploadUrl = await getUploadSignedPdfUrl(key, contentType, 900);
+    const uploadUrl = await getUploadSignedPdfUrl(key, contentType, 300);
 
     return { success: true, data: { uploadUrl, key } };
   } catch (error) {

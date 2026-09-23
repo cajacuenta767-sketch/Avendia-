@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { getUsuariosAction } from '@/services/usuariosService';
 import { getRecursosAction } from '@/services/recursosService';
 import { getEvaluacionesAction } from '@/services/evaluacionesService';
+import { verifyAdminSession } from '@/services/adminService';
 
 export interface DashboardStats {
   totalUsuarios: number;
@@ -21,6 +22,7 @@ export type ActionResponse<T> =
 
 export async function getDashboardStatsAction(): Promise<ActionResponse<DashboardStats>> {
   try {
+    if (!(await verifyAdminSession())) return { success: false, error: { code: 'UNAUTHORIZED', message: 'Acceso denegado.' } };
     const now = new Date();
     const in7Days = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 

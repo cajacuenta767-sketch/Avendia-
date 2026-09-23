@@ -1,0 +1,24 @@
+{
+  "$schema": "https://raw.githubusercontent.com/TestSprite/testsprite-cli/v0.7.0/schemas/plan.schema.json",
+  "projectId": "c83c6336-38d5-42ed-a742-0c24077b6964",
+  "type": "frontend",
+  "name": "05 - Auth: Persistencia de Sesión Docente y Cierre de Sesión Seguro",
+  "planSteps": [
+    {
+      "type": "action",
+      "description": "Iniciar sesión en https://cuadernillos.avend.pe/cuadernillos y recargar la página del navegador."
+    },
+    {
+      "type": "assertion",
+      "description": "Verificar que la sesión se mantenga activa y no vuelva a solicitar el ingreso de correo."
+    },
+    {
+      "type": "action",
+      "description": "Hacer clic en el botón de cerrar sesión del docente."
+    },
+    {
+      "type": "assertion",
+      "description": "Verificar que la sesión se destruya completamente y vuelva a mostrar el banner de acceso para docentes."
+    }
+  ]
+}

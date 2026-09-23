@@ -1,0 +1,16 @@
+{
+  "$schema": "https://raw.githubusercontent.com/TestSprite/testsprite-cli/v0.7.0/schemas/plan.schema.json",
+  "projectId": "c83c6336-38d5-42ed-a742-0c24077b6964",
+  "type": "frontend",
+  "name": "06 - Filtros: Alternar Procesos Nombramiento y Ascenso",
+  "planSteps": [
+    {
+      "type": "action",
+      "description": "Navegar a https://cuadernillos.avend.pe/cuadernillos y hacer clic en la pestaña de 'Ascenso de Escala'."
+    },
+    {
+      "type": "assertion",
+      "description": "Verificar que la interfaz cambie al color temático de Ascenso y filtre las evaluaciones exclusivas de Ascenso."
+    }
+  ]
+}

@@ -82,7 +82,13 @@ export const ResourceCard: React.FC<ResourceCardProps> = ({ recurso, onOpenPdf }
   const theme = THEME_STYLES[recurso.colorTheme] || THEME_STYLES.purple;
   const numFormatted = String(recurso.numero).padStart(2, '0');
 
-  const hasValidImage = Boolean(recurso.urlImagen) && !imageError;
+  const resolvedImageUrl = recurso.urlImagen
+    ? (recurso.urlImagen.startsWith('data:') || recurso.urlImagen.startsWith('http')
+        ? recurso.urlImagen
+        : `/api/pdf-stream?url=${encodeURIComponent(recurso.urlImagen)}`)
+    : undefined;
+
+  const hasValidImage = Boolean(resolvedImageUrl) && !imageError;
 
   return (
     <article
@@ -92,7 +98,7 @@ export const ResourceCard: React.FC<ResourceCardProps> = ({ recurso, onOpenPdf }
       {hasValidImage ? (
         <div className="relative w-full h-44 overflow-hidden bg-slate-100 dark:bg-slate-800">
           <img
-            src={recurso.urlImagen}
+            src={resolvedImageUrl}
             alt={recurso.titulo}
             onError={() => setImageError(true)}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
@@ -163,14 +169,19 @@ export const ResourceCard: React.FC<ResourceCardProps> = ({ recurso, onOpenPdf }
         <div className="pt-3 border-t border-gray-100 dark:border-gray-800">
           <button
             type="button"
-            onClick={() => onOpenPdf(recurso)}
-            className={`w-full flex items-center justify-between px-4 py-2.5 rounded-xl ${theme.btnBg} ${theme.btnText} ${theme.btnHoverBg} text-xs font-bold transition-all border border-gray-200/50 dark:border-gray-800 cursor-pointer`}
+            disabled={!recurso.urlPdf}
+            onClick={() => recurso.urlPdf && onOpenPdf(recurso)}
+            className={`w-full flex items-center justify-between px-4 py-2.5 rounded-xl ${
+              recurso.urlPdf
+                ? `${theme.btnBg} ${theme.btnText} ${theme.btnHoverBg} cursor-pointer`
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600 cursor-not-allowed opacity-60'
+            } text-xs font-bold transition-all border border-gray-200/50 dark:border-gray-800`}
           >
             <div className="flex items-center space-x-2">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
-              <span>VER RECURSO</span>
+              <span>{recurso.urlPdf ? 'VER RECURSO' : 'PDF NO DISPONIBLE'}</span>
             </div>
             <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded bg-white/70 dark:bg-black/30 shadow-xs">
               PDF

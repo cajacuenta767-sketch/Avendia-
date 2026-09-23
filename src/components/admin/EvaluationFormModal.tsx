@@ -1,7 +1,4 @@
-// src/components/admin/EvaluationFormModal.tsx
-'use client';
-
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createEvaluationAction, generateR2UploadUrlAction } from '@/services/adminService';
 import { ProcesoMinedu, ModalidadEducativa, NivelEducativo } from '@/types/evaluacion';
 
@@ -10,6 +7,7 @@ import {
   NIVELES_POR_MODALIDAD as NIVELES_POR_MODALIDAD_DATA,
   AREAS_POR_MODALIDAD_NIVEL,
   ESPECIALIDADES_DIRECTIVOS_LIST,
+  TIPOS_CUADERNILLO_NOMBRAMIENTO,
   ModalidadKey,
 } from '@/data/cascadingData';
 
@@ -26,11 +24,32 @@ export const EvaluationFormModal: React.FC<EvaluationFormModalProps> = ({
 }) => {
   const [mineduCode, setMineduCode] = useState('');
   const [title, setTitle] = useState('');
-  const [proceso, setProceso] = useState<ProcesoMinedu>('NOMBRAMIENTO_DOCENTE');
-  const [modalidad, setModalidad] = useState<ModalidadEducativa>('EBR');
-  const [nivel, setNivel] = useState<NivelEducativo>('SECUNDARIA');
-  const [especialidad, setEspecialidad] = useState('Matemática');
+  const [proceso, setProceso] = useState<ProcesoMinedu | ''>('');
+  const [tipoCuadernillo, setTipoCuadernillo] = useState('');
+  const [modalidad, setModalidad] = useState<ModalidadEducativa | ''>('');
+  const [nivel, setNivel] = useState<NivelEducativo | ''>('');
+  const [especialidad, setEspecialidad] = useState('');
   const [anio, setAnio] = useState(2024);
+
+  // Dropdown combobox para Directivos
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const filteredDirectivos = useMemo(() => {
+    if (!especialidad.trim()) return ESPECIALIDADES_DIRECTIVOS_LIST;
+    const term = especialidad.toLowerCase().trim();
+    return ESPECIALIDADES_DIRECTIVOS_LIST.filter((o) => o.toLowerCase().includes(term));
+  }, [especialidad]);
 
   // Orígenes Institucionales de Recursos
   const [origenCuadernillo, setOrigenCuadernillo] = useState<'MINEDU' | 'AVEND'>('MINEDU');
@@ -78,6 +97,27 @@ export const EvaluationFormModal: React.FC<EvaluationFormModalProps> = ({
     e.preventDefault();
     setErrorMessage('');
 
+    if (!proceso) {
+      setErrorMessage('Selecciona el Proceso Evaluativo');
+      return;
+    }
+    if (!modalidad && proceso !== 'ACCESO_CARGOS_DIRECTIVOS') {
+      setErrorMessage('Selecciona la Modalidad Educativa');
+      return;
+    }
+    const requiresNivelModal = proceso !== 'ACCESO_CARGOS_DIRECTIVOS' && Boolean(modalidad && modalidad !== 'EBE');
+    if (requiresNivelModal && !nivel) {
+      setErrorMessage('Selecciona el Nivel Educativo');
+      return;
+    }
+    const areasDisponiblesModal = modalidad && nivel ? (AREAS_POR_MODALIDAD_NIVEL[modalidad as ModalidadKey]?.[nivel as NivelEducativo] || []) : [];
+    const requiresAreaModal = proceso === 'ACCESO_CARGOS_DIRECTIVOS' || (Boolean(modalidad && modalidad !== 'EBE' && nivel) && areasDisponiblesModal.length > 0);
+
+    if (requiresAreaModal && !especialidad) {
+      setErrorMessage('Selecciona el Área o Especialidad / Cargo');
+      return;
+    }
+
     if (!mineduCode.trim() || !title.trim()) {
       setErrorMessage('Ingresa el código oficial y el título de la evaluación');
       return;
@@ -93,30 +133,46 @@ export const EvaluationFormModal: React.FC<EvaluationFormModalProps> = ({
     try {
       // 1. Obtener Presigned Upload URL para Cuadernillo desde R2
       const uploadRes = await generateR2UploadUrlAction(cuadernilloFile.name, 'application/pdf');
-      const cuadernilloKey = uploadRes.success ? uploadRes.data.key : `evaluations/2024/${cuadernilloFile.name}`;
+      if (!uploadRes.success) {
+        setIsLoading(false);
+        setErrorMessage(uploadRes.error.message);
+        return;
+      }
+      const cuadernilloKey = uploadRes.data.key;
 
       let resolucionKey: string | undefined;
       if (resolucionFile) {
         const resUpload = await generateR2UploadUrlAction(resolucionFile.name, 'application/pdf');
-        resolucionKey = resUpload.success ? resUpload.data.key : undefined;
+        if (!resUpload.success) {
+          setIsLoading(false);
+          setErrorMessage(resUpload.error.message);
+          return;
+        }
+        resolucionKey = resUpload.data.key;
       }
 
       let clavesKey: string | undefined;
       if (clavesFile) {
         const clavUpload = await generateR2UploadUrlAction(clavesFile.name, 'application/pdf');
-        clavesKey = clavUpload.success ? clavUpload.data.key : undefined;
+        if (!clavUpload.success) {
+          setIsLoading(false);
+          setErrorMessage(clavUpload.error.message);
+          return;
+        }
+        clavesKey = clavUpload.data.key;
       }
 
       // 2. Registrar Evaluación mediante Server Action
       const createRes = await createEvaluationAction({
-        mineduCode,
-        title,
-        proceso,
-        modalidad,
-        nivel,
-        especialidad,
+        mineduCode: mineduCode.trim(),
+        title: title.trim(),
+        proceso: proceso as ProcesoMinedu,
+        modalidad: (modalidad || 'EBR') as ModalidadEducativa,
+        nivel: (nivel || 'NO_APLICA') as NivelEducativo,
+        especialidad: requiresAreaModal ? especialidad.trim() : (especialidad.trim() || 'General'),
+        tipoCuadernillo: proceso === 'NOMBRAMIENTO_DOCENTE' ? (tipoCuadernillo.trim() || undefined) : undefined,
         anio: Number(anio),
-        cuadernilloKey: cuadernilloKey || '',
+        cuadernilloKey,
         resolucionKey,
         clavesKey,
         origenCuadernillo,
@@ -139,8 +195,8 @@ export const EvaluationFormModal: React.FC<EvaluationFormModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-950/70 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="relative w-full max-w-2xl bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 p-6 sm:p-8 shadow-2xl max-h-[85vh] overflow-y-auto custom-scrollbar">
+    <div className="responsive-modal-shell fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-gray-950/70 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="responsive-modal-panel relative w-full max-w-2xl bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 p-4 sm:p-8 shadow-2xl max-h-[90dvh] overflow-y-auto custom-scrollbar">
         <div className="flex items-center justify-between mb-5">
           <span className="px-3 py-1 rounded-full bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 text-xs font-extrabold uppercase tracking-wider border border-blue-100 dark:border-blue-900">
             ➕ Ingesta de Material MINEDU & AVEND
@@ -205,25 +261,24 @@ export const EvaluationFormModal: React.FC<EvaluationFormModalProps> = ({
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="space-y-1">
-              <label className="text-xs font-bold text-gray-700 dark:text-gray-300">Proceso</label>
+              <label className="text-xs font-bold text-gray-700 dark:text-gray-300">Proceso *</label>
               <select
                 value={proceso}
                 onChange={(e) => {
-                  const newProc = e.target.value as ProcesoMinedu;
+                  const newProc = e.target.value as ProcesoMinedu | '';
                   setProceso(newProc);
+                  setModalidad('');
+                  setNivel('');
+                  setEspecialidad('');
                   if (newProc === 'ACCESO_CARGOS_DIRECTIVOS') {
+                    setModalidad('EBR');
                     setNivel('NO_APLICA');
-                    setEspecialidad(ESPECIALIDADES_DIRECTIVOS_LIST[0]);
-                  } else {
-                    const list = NIVELES_POR_MODALIDAD_DATA[modalidad as ModalidadKey] || NIVELES_POR_MODALIDAD_DATA.EBR;
-                    const primerNivel = list[0].value as NivelEducativo;
-                    setNivel(primerNivel);
-                    const areasList = AREAS_POR_MODALIDAD_NIVEL[modalidad as ModalidadKey]?.[primerNivel] || [];
-                    setEspecialidad(areasList[0] || '—');
+                    setEspecialidad('');
                   }
                 }}
                 className="w-full h-10 px-2 rounded-xl border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-xs"
               >
+                <option value="">-- Seleccione Proceso --</option>
                 <option value="NOMBRAMIENTO_DOCENTE">Nombramiento Docente</option>
                 <option value="ASCENSO_ESCALAFON">Ascenso de Escala</option>
                 <option value="ACCESO_CARGOS_DIRECTIVOS">Acceso a Directivos</option>
@@ -231,21 +286,19 @@ export const EvaluationFormModal: React.FC<EvaluationFormModalProps> = ({
             </div>
 
             <div className="space-y-1">
-              <label className="text-xs font-bold text-gray-700 dark:text-gray-300">Modalidad</label>
+              <label className="text-xs font-bold text-gray-700 dark:text-gray-300">Modalidad *</label>
               <select
                 value={modalidad}
-                disabled={proceso === 'ACCESO_CARGOS_DIRECTIVOS'}
+                disabled={!proceso || proceso === 'ACCESO_CARGOS_DIRECTIVOS'}
                 onChange={(e) => {
-                  const newMod = e.target.value as ModalidadEducativa;
+                  const newMod = e.target.value as ModalidadEducativa | '';
                   setModalidad(newMod);
-                  const list = NIVELES_POR_MODALIDAD_DATA[newMod as ModalidadKey] || NIVELES_POR_MODALIDAD_DATA.EBR;
-                  const primerNivel = list[0].value as NivelEducativo;
-                  setNivel(primerNivel);
-                  const areasList = AREAS_POR_MODALIDAD_NIVEL[newMod as ModalidadKey]?.[primerNivel] || [];
-                  setEspecialidad(areasList[0] || '—');
+                  setNivel('');
+                  setEspecialidad('');
                 }}
                 className="w-full h-10 px-2 rounded-xl border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-xs disabled:opacity-60"
               >
+                <option value="">-- Seleccione Modalidad --</option>
                 {MODALIDADES_LIST.map((m) => (
                   <option key={m.value} value={m.value}>
                     {m.label}
@@ -255,22 +308,22 @@ export const EvaluationFormModal: React.FC<EvaluationFormModalProps> = ({
             </div>
 
             <div className="space-y-1">
-              <label className="text-xs font-bold text-gray-700 dark:text-gray-300">Nivel</label>
+              <label className="text-xs font-bold text-gray-700 dark:text-gray-300">Nivel *</label>
               <select
                 value={modalidad === 'EBE' ? 'NO_APLICA' : nivel}
-                disabled={proceso === 'ACCESO_CARGOS_DIRECTIVOS' || modalidad === 'EBE'}
+                disabled={!modalidad || proceso === 'ACCESO_CARGOS_DIRECTIVOS' || modalidad === 'EBE'}
                 onChange={(e) => {
-                  const newNiv = e.target.value as NivelEducativo;
+                  const newNiv = e.target.value as NivelEducativo | '';
                   setNivel(newNiv);
-                  const areasList = AREAS_POR_MODALIDAD_NIVEL[modalidad as ModalidadKey]?.[newNiv] || [];
-                  setEspecialidad(areasList[0] || '—');
+                  setEspecialidad('');
                 }}
                 className="w-full h-10 px-2 rounded-xl border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-xs disabled:opacity-60"
               >
+                <option value="">-- Seleccione Nivel --</option>
                 {modalidad === 'EBE' ? (
                   <option value="—">—</option>
                 ) : (
-                  (NIVELES_POR_MODALIDAD_DATA[modalidad as ModalidadKey] || NIVELES_POR_MODALIDAD_DATA.EBR).map((n) => (
+                  modalidad && (NIVELES_POR_MODALIDAD_DATA[modalidad as ModalidadKey] || NIVELES_POR_MODALIDAD_DATA.EBR).map((n) => (
                     <option key={n.value} value={n.value}>
                       {n.label}
                     </option>
@@ -280,91 +333,135 @@ export const EvaluationFormModal: React.FC<EvaluationFormModalProps> = ({
             </div>
           </div>
 
-          <div className="space-y-1">
-            <label className="text-xs font-bold text-gray-700 dark:text-gray-300">
-              Especialidad / Área
-            </label>
-            {proceso === 'ACCESO_CARGOS_DIRECTIVOS' ? (
+          {(() => {
+            const areasModal = modalidad && nivel ? (AREAS_POR_MODALIDAD_NIVEL[modalidad as ModalidadKey]?.[nivel as NivelEducativo] || []) : [];
+            const reqArea = proceso === 'ACCESO_CARGOS_DIRECTIVOS' || (modalidad && nivel ? areasModal.length > 0 : true);
+
+            return (
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-gray-700 dark:text-gray-300">
+                  {proceso === 'ACCESO_CARGOS_DIRECTIVOS'
+                    ? 'Cargo a Postular *'
+                    : reqArea
+                    ? 'Especialidad / Área *'
+                    : 'Especialidad / Área'}
+                </label>
+                {proceso === 'ACCESO_CARGOS_DIRECTIVOS' ? (
+                  <div className="relative w-full space-y-1" ref={dropdownRef}>
+                    <div className="relative flex items-center">
+                      <input
+                        type="text"
+                        value={especialidad}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setEspecialidad(val);
+                          setIsDropdownOpen(true);
+                          if (!title.trim() || title.startsWith('Acceso a Cargos Directivos')) {
+                            setTitle(`Acceso a Cargos Directivos y Especialistas ${anio} - ${val}`);
+                          }
+                        }}
+                        onFocus={() => setIsDropdownOpen(true)}
+                        placeholder="Escribe o selecciona el cargo (ej. Especialistas: Arte y Cultura, Directores de UGEL...)"
+                        className="w-full h-10 px-3 pr-10 rounded-xl border border-emerald-300 dark:border-emerald-700 bg-emerald-50/40 dark:bg-emerald-950/20 text-xs font-bold text-emerald-900 dark:text-emerald-200 outline-none focus:ring-2 focus:ring-emerald-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                        className="absolute right-3 p-1 text-emerald-600 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-white transition-colors cursor-pointer"
+                      >
+                        <svg
+                          className={`w-4 h-4 transition-transform duration-200 ${isDropdownOpen ? 'rotate-180' : ''}`}
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </button>
+                    </div>
+
+                    {isDropdownOpen && (
+                      <div className="absolute left-0 top-full w-full mt-1 z-50 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl max-h-52 overflow-y-auto custom-scrollbar p-1 animate-in fade-in zoom-in-95 duration-150">
+                        {filteredDirectivos.length > 0 ? (
+                          filteredDirectivos.map((opt) => (
+                            <button
+                              key={opt}
+                              type="button"
+                              onClick={() => {
+                                setEspecialidad(opt);
+                                setIsDropdownOpen(false);
+                                if (!title.trim() || title.startsWith('Acceso a Cargos Directivos')) {
+                                  setTitle(`Acceso a Cargos Directivos y Especialistas ${anio} - ${opt}`);
+                                }
+                              }}
+                              className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/60 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors flex items-center justify-between group cursor-pointer"
+                            >
+                              <span>{opt}</span>
+                              <span className="opacity-0 group-hover:opacity-100 text-[10px] text-emerald-600 font-extrabold uppercase transition-opacity">
+                                Seleccionar ↵
+                              </span>
+                            </button>
+                          ))
+                        ) : (
+                          <div className="px-3 py-2 text-center">
+                            <p className="text-xs font-semibold text-slate-500">
+                              No hay sugerencias predefinidas para &quot;{especialidad}&quot;
+                            </p>
+                            <p className="text-[10px] text-emerald-600 font-bold mt-0.5">
+                              ✓ Se guardará como cargo personalizado
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    <p className="text-[10px] text-gray-500 dark:text-slate-400">
+                      💡 Puedes seleccionar de la lista sugerida o escribir cualquier cargo libremente.
+                    </p>
+                  </div>
+                ) : reqArea ? (
+                  <select
+                    value={especialidad}
+                    onChange={(e) => setEspecialidad(e.target.value)}
+                    disabled={!modalidad || !nivel}
+                    className="w-full h-10 px-3 rounded-xl border border-gray-300 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800 text-xs font-bold disabled:opacity-60"
+                  >
+                    <option value="">-- Seleccione Especialidad / Área --</option>
+                    {areasModal.map((esp) => (
+                      <option key={esp} value={esp}>
+                        {esp}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className="w-full h-10 px-3 rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50/70 dark:bg-emerald-950/30 text-xs font-bold text-emerald-800 dark:text-emerald-300 flex items-center justify-between">
+                    <span>✓ Sin especialidad específica (Nivel {nivel === 'INICIAL' ? 'Inicial' : nivel || 'General'})</span>
+                    <span className="text-[10px] font-black text-emerald-700 dark:text-emerald-300 uppercase bg-emerald-100 dark:bg-emerald-900/60 px-2 py-0.5 rounded-md">
+                      Aplica a todo el Nivel
+                    </span>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* Campo Condicional Exclusivo para Nombramiento: Tipo de Cuadernillo */}
+          {proceso === 'NOMBRAMIENTO_DOCENTE' && (
+            <div className="space-y-1.5 animate-in fade-in">
+              <label className="block text-xs font-bold text-purple-950 dark:text-purple-300 uppercase tracking-wider">
+                Tipo de Cuadernillo *
+              </label>
               <select
-                value={especialidad}
-                onChange={(e) => setEspecialidad(e.target.value)}
-                className="w-full h-10 px-3 rounded-xl border border-gray-300 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800 text-xs font-bold"
+                value={tipoCuadernillo}
+                onChange={(e) => setTipoCuadernillo(e.target.value)}
+                className="w-full h-10 px-3 rounded-xl border border-purple-300 dark:border-purple-800 bg-purple-50/70 dark:bg-purple-950/40 text-xs font-black text-purple-950 dark:text-purple-200 outline-none focus:ring-2 focus:ring-purple-600 cursor-pointer"
               >
-                {ESPECIALIDADES_DIRECTIVOS_LIST.map((esp) => (
-                  <option key={esp} value={esp}>
-                    {esp}
+                <option value="">-- Selecciona el tipo de cuadernillo --</option>
+                {TIPOS_CUADERNILLO_NOMBRAMIENTO.map((tipo) => (
+                  <option key={tipo} value={tipo}>
+                    {tipo}
                   </option>
                 ))}
               </select>
-            ) : (
-              <select
-                value={(AREAS_POR_MODALIDAD_NIVEL[modalidad as ModalidadKey]?.[nivel] || []).length === 0 ? '—' : especialidad}
-                onChange={(e) => setEspecialidad(e.target.value)}
-                disabled={(AREAS_POR_MODALIDAD_NIVEL[modalidad as ModalidadKey]?.[nivel] || []).length === 0}
-                className="w-full h-10 px-3 rounded-xl border border-gray-300 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800 text-xs font-bold disabled:opacity-80"
-              >
-                {(AREAS_POR_MODALIDAD_NIVEL[modalidad as ModalidadKey]?.[nivel] || []).length === 0 ? (
-                  <option value="—">—</option>
-                ) : (
-                  (AREAS_POR_MODALIDAD_NIVEL[modalidad as ModalidadKey]?.[nivel] || []).map((esp) => (
-                    <option key={esp} value={esp}>
-                      {esp}
-                    </option>
-                  ))
-                )}
-              </select>
-            )}
-          </div>
-
-          {/* Clasificación Obligatoria para Nombramiento Docente */}
-          {proceso === 'NOMBRAMIENTO_DOCENTE' && (
-            <div className="p-4 rounded-2xl bg-purple-50/70 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800 space-y-2">
-              <label className="text-xs font-black text-purple-900 dark:text-purple-300 uppercase tracking-wider block">
-                Clasificación Obligatoria para Nombramiento Docente *
-              </label>
-              <p className="text-[11px] text-purple-700 dark:text-purple-400">
-                Selecciona la categoría correspondiente para que el docente pueda filtrar el material adecuadamente.
-              </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                <label className={`flex items-center space-x-2.5 p-3 rounded-xl border cursor-pointer transition-all ${
-                  especialidad.toLowerCase().includes('habilidades generales') || especialidad.toLowerCase().includes('general')
-                    ? 'bg-purple-600 text-white border-purple-600 font-bold shadow-xs'
-                    : 'bg-white dark:bg-slate-900 border-gray-200 dark:border-slate-800 text-gray-700 dark:text-slate-300 hover:border-purple-300'
-                }`}>
-                  <input
-                    type="radio"
-                    name="categoriaNombramiento"
-                    checked={especialidad.toLowerCase().includes('habilidades generales') || especialidad.toLowerCase().includes('general')}
-                    onChange={() => setEspecialidad('Habilidades Generales')}
-                    className="accent-purple-600"
-                  />
-                  <div className="text-xs">
-                    <span className="font-extrabold block">🧠 Habilidades Generales</span>
-                    <span className="text-[10px] opacity-80 block">Comprensión Lectora / Razonamiento Lógico</span>
-                  </div>
-                </label>
-
-                <label className={`flex items-center space-x-2.5 p-3 rounded-xl border cursor-pointer transition-all ${
-                  !especialidad.toLowerCase().includes('habilidades generales') && !especialidad.toLowerCase().includes('general')
-                    ? 'bg-purple-600 text-white border-purple-600 font-bold shadow-xs'
-                    : 'bg-white dark:bg-slate-900 border-gray-200 dark:border-slate-800 text-gray-700 dark:text-slate-300 hover:border-purple-300'
-                }`}>
-                  <input
-                    type="radio"
-                    name="categoriaNombramiento"
-                    checked={!especialidad.toLowerCase().includes('habilidades generales') && !especialidad.toLowerCase().includes('general')}
-                    onChange={() => {
-                      const areasList = AREAS_POR_MODALIDAD_NIVEL[modalidad as ModalidadKey]?.[nivel] || [];
-                      setEspecialidad(areasList[0] || 'Matemática');
-                    }}
-                    className="accent-purple-600"
-                  />
-                  <div className="text-xs">
-                    <span className="font-extrabold block">📚 Conocimientos Curriculares</span>
-                    <span className="text-[10px] opacity-80 block">Pedagógicos y Especialidad Disciplinar</span>
-                  </div>
-                </label>
-              </div>
             </div>
           )}
 

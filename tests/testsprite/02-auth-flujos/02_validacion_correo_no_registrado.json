@@ -1,0 +1,16 @@
+{
+  "$schema": "https://raw.githubusercontent.com/TestSprite/testsprite-cli/v0.7.0/schemas/plan.schema.json",
+  "projectId": "c83c6336-38d5-42ed-a742-0c24077b6964",
+  "type": "frontend",
+  "name": "04 - Auth: Validación y Alerta de Correo No Registrado",
+  "planSteps": [
+    {
+      "type": "action",
+      "description": "Navegar a https://cuadernillos.avend.pe/cuadernillos e ingresar un correo inexistente como 'usuario.no.valido.2026@gmail.com'."
+    },
+    {
+      "type": "assertion",
+      "description": "Verificar que el sistema muestre la alerta de que el correo no pertenece a AVEND ESCALA con el enlace de soporte por WhatsApp."
+    }
+  ]
+}

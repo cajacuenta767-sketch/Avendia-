@@ -17,6 +17,7 @@ interface CascadingFiltersProps {
   activeProceso?: ProcesoMinedu;
   activeSubcategoria?: string;
   onSubcategoriaChange?: (sub: 'TODOS' | 'HABILIDADES_GENERALES' | 'CONOCIMIENTOS_CURRICULARES') => void;
+  availableAnios?: string[];
 }
 
 import {
@@ -26,18 +27,6 @@ import {
   ESPECIALIDADES_DIRECTIVOS_LIST,
   ModalidadKey,
 } from '@/data/cascadingData';
-
-const ANIOS = [
-  { value: '2024', label: 'Todos los años' },
-  { value: '2023', label: 'Año 2023' },
-  { value: '2022', label: 'Año 2022' },
-  { value: '2021', label: 'Año 2021' },
-  { value: '2019', label: 'Año 2019' },
-  { value: '2018', label: 'Año 2018' },
-  { value: '2017', label: 'Año 2017' },
-  { value: '2015', label: 'Año 2015' },
-  { value: '2014', label: 'Año 2014' },
-];
 
 const PROCESO_THEMES: Record<ProcesoMinedu, {
   numBg: string;
@@ -91,8 +80,17 @@ export const CascadingFilters: React.FC<CascadingFiltersProps> = ({
   activeProceso = 'NOMBRAMIENTO_DOCENTE',
   activeSubcategoria = 'TODOS',
   onSubcategoriaChange,
+  availableAnios = [],
 }) => {
   const isDirectivos = activeProceso === 'ACCESO_CARGOS_DIRECTIVOS';
+
+  const optionsAnios = useMemo(() => {
+    const list = availableAnios || [];
+    return [
+      { value: 'TODOS', label: 'Ver todos los años' },
+      ...list.map((y) => ({ value: String(y), label: `Año ${y}` }))
+    ];
+  }, [availableAnios]);
 
   const currentModalidad = (filters.modalidad && filters.modalidad !== 'TODOS') ? filters.modalidad : '';
 
@@ -137,30 +135,41 @@ export const CascadingFilters: React.FC<CascadingFiltersProps> = ({
   const theme = PROCESO_THEMES[activeProceso] || PROCESO_THEMES.NOMBRAMIENTO_DOCENTE;
 
   const handleModalidadChange = (nuevaModalidadStr: string) => {
-    const nuevaModalidad = nuevaModalidadStr as ModalidadEducativa;
+    const nuevaModalidad: ModalidadEducativa | '' =
+      nuevaModalidadStr && nuevaModalidadStr !== 'TODOS'
+        ? nuevaModalidadStr as ModalidadEducativa
+        : '';
     onFilterChange({
       ...filters,
       modalidad: nuevaModalidad,
-      nivel: isDirectivos ? ('NO_APLICA' as NivelEducativo) : ('' as any),
+      nivel: isDirectivos ? 'NO_APLICA' : '',
       especialidad: '',
+      anio: '',
     });
   };
 
-  const handleNivelChange = (nuevoNivel: string) => {
+  const handleNivelChange = (nuevoNivelStr: string) => {
+    const nuevoNivel: NivelEducativo | '' =
+      nuevoNivelStr && nuevoNivelStr !== 'TODOS'
+        ? nuevoNivelStr as NivelEducativo
+        : '';
     onFilterChange({
       ...filters,
       modalidad: currentModalidad as ModalidadEducativa,
-      nivel: nuevoNivel as NivelEducativo,
+      nivel: nuevoNivel,
       especialidad: '',
+      anio: '',
     });
   };
 
-  const handleEspecialidadChange = (nuevaEspecialidad: string) => {
+  const handleEspecialidadChange = (nuevaEspecialidadStr: string) => {
+    const nuevaEspecialidad = (nuevaEspecialidadStr && nuevaEspecialidadStr !== 'TODOS' && nuevaEspecialidadStr !== '—') ? nuevaEspecialidadStr : '';
     onFilterChange({
       ...filters,
       modalidad: currentModalidad as ModalidadEducativa,
       nivel: currentNivel as NivelEducativo,
       especialidad: nuevaEspecialidad,
+      anio: '',
     });
   };
 
@@ -170,7 +179,11 @@ export const CascadingFilters: React.FC<CascadingFiltersProps> = ({
       modalidad: currentModalidad as ModalidadEducativa,
       nivel: currentNivel as NivelEducativo,
       especialidad: currentEspecialidad,
-      anio: nuevoAnioStr ? Number(nuevoAnioStr) : ('' as any),
+      anio: nuevoAnioStr === 'TODOS'
+        ? 'TODOS'
+        : nuevoAnioStr
+          ? Number(nuevoAnioStr)
+          : '',
     });
   };
 
@@ -181,33 +194,6 @@ export const CascadingFilters: React.FC<CascadingFiltersProps> = ({
     : 'Nombramiento';
 
   const nivelTextoLabel = nivelesDisponibles.find((n) => n.value === currentNivel)?.label;
-
-  const isEspecialidadComplete = useMemo(() => {
-    if (!currentModalidad) return false;
-    if (isDirectivos) return !!currentEspecialidad;
-    if (!currentNivel) return false;
-    if (filters.modalidad === 'EBE' || (currentNivel && especialidadesDisponibles.length === 0)) {
-      return true;
-    }
-    return !!currentEspecialidad;
-  }, [currentModalidad, currentNivel, currentEspecialidad, isDirectivos, filters.modalidad, especialidadesDisponibles]);
-
-  const showSubpruebasFilter = useMemo(() => {
-    if (activeProceso !== 'NOMBRAMIENTO_DOCENTE') return false;
-    if (!currentModalidad) return false;
-
-    // 1. Nombramiento EBR Primaria -> Primaria
-    if (currentModalidad === 'EBR' && currentNivel === 'PRIMARIA' && currentEspecialidad.toLowerCase().trim() === 'primaria') {
-      return true;
-    }
-
-    // 2. Nombramiento EBR Inicial (sin especialidad diferenciada)
-    if (currentModalidad === 'EBR' && currentNivel === 'INICIAL') {
-      return true;
-    }
-
-    return false;
-  }, [activeProceso, currentModalidad, currentNivel, currentEspecialidad]);
 
   return (
     <section className="w-full space-y-3 bg-white dark:bg-slate-900 p-5 rounded-2xl border border-gray-200/80 dark:border-slate-800 shadow-2xs">
@@ -222,7 +208,9 @@ export const CascadingFilters: React.FC<CascadingFiltersProps> = ({
               Completa los datos
             </h2>
             <p className="text-[11px] text-gray-400 dark:text-slate-500">
-              Las opciones se desbloquean en orden secuencial según cada selección.
+              {isDirectivos
+                ? 'Consulta todas las evaluaciones oficiales de Acceso a Cargos Directivos y Especialistas o filtra por año.'
+                : 'El catálogo responde en tiempo real a medida que seleccionas cada criterio.'}
             </p>
           </div>
         </div>
@@ -239,41 +227,57 @@ export const CascadingFilters: React.FC<CascadingFiltersProps> = ({
         </button>
       </div>
 
-      {/* Grid Adaptable de Selectores en Cascada en la Barra Superior */}
-      <div
-        className={`grid grid-cols-1 sm:grid-cols-2 ${
-          isDirectivos ? 'lg:grid-cols-3' : showSubpruebasFilter ? 'lg:grid-cols-5' : 'lg:grid-cols-4'
-        } gap-3 pt-1`}
-      >
-        {/* Paso 1: Modalidad */}
-        <div className="space-y-1">
-          <label className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-tight">
-            Modalidad
-          </label>
-          <select
-            value={filters.modalidad && filters.modalidad !== 'TODOS' ? filters.modalidad : ''}
-            onChange={(e) => handleModalidadChange(e.target.value)}
-            className="w-full h-10 px-3 rounded-xl border border-gray-200 dark:border-slate-800 bg-gray-50/50 dark:bg-slate-800 text-gray-900 dark:text-white text-xs font-bold focus:outline-none transition-all cursor-pointer"
-          >
-            <option value="" disabled hidden className="text-gray-400">
-              Selecciona tu modalidad
-            </option>
-            {MODALIDADES_LIST.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
+      {isDirectivos ? (
+        /* Vista Exclusiva y Limpia para Directivos: Selector de Año con Diseño Neutro Estándar */
+        <div className="pt-1 max-w-xs sm:max-w-sm">
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-tight">
+              Año de evaluación (Opcional)
+            </label>
+            <select
+              value={filters.anio && String(filters.anio) !== 'TODOS' ? String(filters.anio) : 'TODOS'}
+              onChange={(e) => handleAnioChange(e.target.value)}
+              className="w-full h-10 px-3 rounded-xl border border-gray-200 dark:border-slate-800 bg-gray-50/50 dark:bg-slate-800 text-gray-900 dark:text-white text-xs font-bold focus:outline-none transition-all cursor-pointer origin-top"
+            >
+              {optionsAnios.map((opt) => (
+                <option key={opt.value} value={opt.value} className="bg-white dark:bg-slate-800 text-gray-900 dark:text-white font-bold py-1">
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
+      ) : (
+        /* Grid Principal de 4 Selectores en Cascada para Nombramiento y Ascenso */
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-1">
+          {/* Paso 1: Modalidad */}
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-tight">
+              Modalidad
+            </label>
+            <select
+              value={filters.modalidad && filters.modalidad !== 'TODOS' ? filters.modalidad : ''}
+              onChange={(e) => handleModalidadChange(e.target.value)}
+              className="w-full h-10 px-3 rounded-xl border border-gray-200 dark:border-slate-800 bg-gray-50/50 dark:bg-slate-800 text-gray-900 dark:text-white text-xs font-bold focus:outline-none transition-all cursor-pointer"
+            >
+              <option value="" disabled hidden className="text-gray-400">
+                Selecciona tu modalidad
+              </option>
+              {MODALIDADES_LIST.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
 
-        {/* Paso 2: Nivel Educativo */}
-        {!isDirectivos && (
+          {/* Paso 2: Nivel Educativo */}
           <div className="space-y-1">
             <label className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-tight">
               Nivel
             </label>
             <select
-              value={filters.modalidad === 'EBE' ? '—' : currentNivel}
+              value={filters.modalidad === 'EBE' ? '—' : (filters.nivel && filters.nivel !== 'TODOS' ? filters.nivel : '')}
               onChange={(e) => handleNivelChange(e.target.value)}
               disabled={!currentModalidad || filters.modalidad === 'EBE'}
               className="w-full h-10 px-3 rounded-xl border border-gray-200 dark:border-slate-800 bg-gray-50/50 dark:bg-slate-800 text-gray-900 dark:text-white text-xs font-bold focus:outline-none transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
@@ -298,116 +302,76 @@ export const CascadingFilters: React.FC<CascadingFiltersProps> = ({
               )}
             </select>
           </div>
-        )}
 
-        {/* Paso 3: Cargo o Especialidad */}
-        <div className="space-y-1">
-          <label className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-tight">
-            {isDirectivos ? 'Cargo a Postular (MINEDU)' : 'Área o especialidad'}
-          </label>
-          <select
-            value={
-              filters.modalidad === 'EBE' || (!isDirectivos && currentNivel && especialidadesDisponibles.length === 0)
-                ? '—'
-                : currentEspecialidad
-            }
-            onChange={(e) => handleEspecialidadChange(e.target.value)}
-            disabled={
-              !currentModalidad ||
-              (!isDirectivos && !currentNivel) ||
-              filters.modalidad === 'EBE' ||
-              (!isDirectivos && !!currentNivel && especialidadesDisponibles.length === 0)
-            }
-            className="w-full h-10 px-3 rounded-xl border border-gray-200 dark:border-slate-800 bg-gray-50/50 dark:bg-slate-800 text-gray-900 dark:text-white text-xs font-bold focus:outline-none transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
-          >
-            {!currentModalidad ? (
-              <option value="" disabled hidden className="text-gray-400">
-                🔒 Primero selecciona modalidad
-              </option>
-            ) : !isDirectivos && !currentNivel ? (
-              <option value="" disabled hidden className="text-gray-400">
-                🔒 Primero selecciona nivel
-              </option>
-            ) : filters.modalidad === 'EBE' || (!isDirectivos && currentNivel && especialidadesDisponibles.length === 0) ? (
-              <option value="—">No requiere especialidad (General)</option>
-            ) : (
-              <>
-                <option value="" disabled hidden className="text-gray-400">
-                  {isDirectivos ? 'Selecciona tu cargo' : 'Selecciona una especialidad'}
-                </option>
-                {especialidadesDisponibles.map((opt) => {
-                  const itemVal = typeof opt === 'string' ? opt : (opt as any).label || (opt as any).value;
-                  return (
-                    <option key={itemVal} value={itemVal}>
-                      {itemVal}
-                    </option>
-                  );
-                })}
-              </>
-            )}
-          </select>
-        </div>
-
-        {/* Paso 4: Año de Evaluación */}
-        <div className="space-y-1">
-          <label className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-tight">
-            Año
-          </label>
-          <select
-            value={filters.anio && filters.anio !== 'TODOS' ? String(filters.anio) : ''}
-            onChange={(e) => handleAnioChange(e.target.value)}
-            disabled={!isEspecialidadComplete}
-            className="w-full h-10 px-3 rounded-xl border border-gray-200 dark:border-slate-800 bg-gray-50/50 dark:bg-slate-800 text-gray-900 dark:text-white text-xs font-bold focus:outline-none transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
-          >
-            {!currentModalidad ? (
-              <option value="" disabled hidden className="text-gray-400">
-                🔒 Primero selecciona modalidad
-              </option>
-            ) : !isDirectivos && !currentNivel ? (
-              <option value="" disabled hidden className="text-gray-400">
-                🔒 Primero selecciona nivel
-              </option>
-            ) : !isEspecialidadComplete ? (
-              <option value="" disabled hidden className="text-gray-400">
-                🔒 Primero selecciona área o especialidad
-              </option>
-            ) : (
-              <>
-                <option value="" disabled hidden className="text-gray-400">
-                  Selecciona el año
-                </option>
-                {ANIOS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </>
-            )}
-          </select>
-        </div>
-
-        {/* Selector Integrado Compacto de Subprueba (Nombramiento Primaria / Inicial) */}
-        {showSubpruebasFilter && (
-          <div className="space-y-1 animate-in fade-in duration-300">
-            <label className="text-[10px] font-bold text-purple-600 dark:text-purple-400 uppercase tracking-tight flex items-center space-x-1">
-              <span>Subprueba</span>
-              <span className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse inline-block" />
+          {/* Paso 3: Cargo o Especialidad */}
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-tight">
+              Área o especialidad
             </label>
             <select
-              value={activeSubcategoria || 'HABILIDADES_GENERALES'}
-              onChange={(e) => onSubcategoriaChange?.(e.target.value as any)}
-              className="w-full h-10 px-3 rounded-xl border border-purple-300 dark:border-purple-800 bg-purple-50/60 dark:bg-purple-950/40 text-purple-900 dark:text-purple-200 text-xs font-bold focus:outline-none transition-all cursor-pointer shadow-2xs"
+              value={
+                filters.modalidad === 'EBE' || (currentNivel && especialidadesDisponibles.length === 0)
+                  ? '—'
+                  : (filters.especialidad && filters.especialidad !== 'TODOS' ? filters.especialidad : '')
+              }
+              onChange={(e) => handleEspecialidadChange(e.target.value)}
+              disabled={
+                !currentModalidad ||
+                !currentNivel ||
+                filters.modalidad === 'EBE' ||
+                (!!currentNivel && especialidadesDisponibles.length === 0)
+              }
+              className="w-full h-10 px-3 rounded-xl border border-gray-200 dark:border-slate-800 bg-gray-50/50 dark:bg-slate-800 text-gray-900 dark:text-white text-xs font-bold focus:outline-none transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              <option value="HABILIDADES_GENERALES">
-                Habilidades Generales
-              </option>
-              <option value="CONOCIMIENTOS_CURRICULARES">
-                Conocimiento Curriculares y Pedagógicos
-              </option>
+              {!currentModalidad ? (
+                <option value="" disabled hidden className="text-gray-400">
+                  🔒 Primero selecciona modalidad
+                </option>
+              ) : !currentNivel ? (
+                <option value="" disabled hidden className="text-gray-400">
+                  🔒 Primero selecciona nivel
+                </option>
+              ) : filters.modalidad === 'EBE' || (currentNivel && especialidadesDisponibles.length === 0) ? (
+                <option value="—">No requiere especialidad (General)</option>
+              ) : (
+                <>
+                  <option value="" disabled hidden className="text-gray-400">
+                    Selecciona tu área o especialidad
+                  </option>
+                  {especialidadesDisponibles.map((itemVal) => {
+                    return (
+                      <option key={itemVal} value={itemVal}>
+                        {itemVal}
+                      </option>
+                    );
+                  })}
+                </>
+              )}
             </select>
           </div>
-        )}
-      </div>
+
+          {/* Paso 4: Año de Evaluación */}
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-tight">
+              Año
+            </label>
+            <select
+              value={filters.anio && String(filters.anio) !== 'TODOS' ? String(filters.anio) : (filters.anio === 'TODOS' ? 'TODOS' : '')}
+              onChange={(e) => handleAnioChange(e.target.value)}
+              className="w-full h-10 px-3 rounded-xl border border-gray-200 dark:border-slate-800 bg-gray-50/50 dark:bg-slate-800 text-gray-900 dark:text-white text-xs font-bold focus:outline-none transition-all cursor-pointer origin-top"
+            >
+              <option value="" disabled hidden className="text-gray-400">
+                Selecciona tu año
+              </option>
+              {optionsAnios.map((opt) => (
+                <option key={opt.value} value={opt.value} className="bg-white dark:bg-slate-800 text-gray-900 dark:text-white font-bold py-1">
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      )}
 
       {/* Banner Informativo Dinámico de Selección Activa */}
       <div className={`mt-3 p-3 rounded-xl ${theme.infoBg} border ${theme.infoBorder} flex items-center space-x-2.5 text-xs ${theme.infoText} transition-colors duration-300`}>
@@ -419,9 +383,11 @@ export const CascadingFilters: React.FC<CascadingFiltersProps> = ({
         <div className="leading-tight text-[11px] sm:text-xs">
           <span>Seleccionaste </span>
           <span className="font-bold">
-            {procesoNombre} - {currentModalidad}
+            {procesoNombre}
+            {!isDirectivos && currentModalidad ? ` - ${currentModalidad}` : ''}
             {!isDirectivos && nivelTextoLabel ? ` - ${nivelTextoLabel}` : ''}
-            {currentEspecialidad && currentEspecialidad !== '—' ? ` - ${currentEspecialidad}` : ''}
+            {!isDirectivos && currentEspecialidad && currentEspecialidad !== '—' && currentNivel !== 'INICIAL' && currentEspecialidad.toLowerCase() !== 'general' ? ` - ${currentEspecialidad}` : ''}
+            {currentAnio ? ` (Año ${currentAnio})` : (filters.anio === 'TODOS' ? ' (Todos los años)' : '')}
           </span>
           <span>. Revisa los cuadernillos disponibles.</span>
         </div>

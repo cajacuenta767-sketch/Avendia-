@@ -1,0 +1,16 @@
+{
+  "$schema": "https://raw.githubusercontent.com/TestSprite/testsprite-cli/v0.7.0/schemas/plan.schema.json",
+  "projectId": "c83c6336-38d5-42ed-a742-0c24077b6964",
+  "type": "frontend",
+  "name": "09 - Filtros: Buscador por Texto y Paginación de Exámenes",
+  "planSteps": [
+    {
+      "type": "action",
+      "description": "Navegar a https://cuadernillos.avend.pe/cuadernillos y escribir '2018' o 'Matemática' en la barra de búsqueda rápida."
+    },
+    {
+      "type": "assertion",
+      "description": "Verificar que la lista de tarjetas filtre los resultados en tiempo real y que la paginación inferior permita navegar entre páginas de evaluaciones."
+    }
+  ]
+}

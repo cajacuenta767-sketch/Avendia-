@@ -1,0 +1,24 @@
+{
+  "$schema": "https://raw.githubusercontent.com/TestSprite/testsprite-cli/v0.7.0/schemas/plan.schema.json",
+  "projectId": "c83c6336-38d5-42ed-a742-0c24077b6964",
+  "type": "frontend",
+  "name": "01 - Home: Carga de Hero, Beneficios y Redirección al Catálogo",
+  "planSteps": [
+    {
+      "type": "action",
+      "description": "Navegar a la página principal https://cuadernillos.avend.pe/"
+    },
+    {
+      "type": "assertion",
+      "description": "Verificar que cargue la sección Hero con el título oficial de AVEND ESCALA, la lista de beneficios docentes y el botón de llamada a la acción para explorar los cuadernillos."
+    },
+    {
+      "type": "action",
+      "description": "Hacer clic en el botón principal para explorar cuadernillos."
+    },
+    {
+      "type": "assertion",
+      "description": "Verificar que la URL redirija correctamente a /cuadernillos cargando el catálogo de evaluaciones."
+    }
+  ]
+}

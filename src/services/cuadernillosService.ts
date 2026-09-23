@@ -5,6 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import { revalidatePath } from 'next/cache';
 import { prisma } from '@/lib/prisma';
+import { verifyAdminSession } from '@/services/adminService';
 
 export interface CuadernilloItem {
   id: string;
@@ -175,6 +176,7 @@ export async function crearCuadernilloAction(data: {
   esPremium?: boolean;
 }): Promise<ActionResponse<{ id: string }>> {
   try {
+    if (!(await verifyAdminSession())) return { success: false, error: { code: 'UNAUTHORIZED', message: 'Acceso denegado.' } };
     const cuadernilloPath = data.urlCuadernillo ? saveBase64ToFile(data.urlCuadernillo, 'cuadernillos', 'cuadernillo') : null;
     const resolucionPath = data.urlResolucion ? saveBase64ToFile(data.urlResolucion, 'cuadernillos', 'resolucion') : null;
     const clavesPath = data.urlClaves ? saveBase64ToFile(data.urlClaves, 'cuadernillos', 'claves') : null;
@@ -227,6 +229,7 @@ export async function actualizarCuadernilloAction(
   }
 ): Promise<ActionResponse<{ id: string }>> {
   try {
+    if (!(await verifyAdminSession())) return { success: false, error: { code: 'UNAUTHORIZED', message: 'Acceso denegado.' } };
     const payload: any = {};
     if (data.titulo) payload.titulo = data.titulo.trim();
     if (data.proceso) payload.proceso = data.proceso;
@@ -268,6 +271,7 @@ export async function actualizarCuadernilloAction(
 
 export async function eliminarCuadernilloAction(id: string): Promise<ActionResponse<{ id: string }>> {
   try {
+    if (!(await verifyAdminSession())) return { success: false, error: { code: 'UNAUTHORIZED', message: 'Acceso denegado.' } };
     await prisma.evaluacion.delete({
       where: { id },
     });

@@ -1,0 +1,16 @@
+{
+  "$schema": "https://raw.githubusercontent.com/TestSprite/testsprite-cli/v0.7.0/schemas/plan.schema.json",
+  "projectId": "c83c6336-38d5-42ed-a742-0c24077b6964",
+  "type": "frontend",
+  "name": "15 - Vigencias: Modal Bloqueante de Expiración con Enlace a WhatsApp",
+  "planSteps": [
+    {
+      "type": "action",
+      "description": "Simular la finalización del tiempo del contador regresivo en https://cuadernillos.avend.pe/cuadernillos."
+    },
+    {
+      "type": "assertion",
+      "description": "Verificar que la sesión del docente se destruya y aparezca el modal bloqueante '⛔ Tu Periodo de Prueba de 24 Horas ha Finalizado' con el botón directo a WhatsApp."
+    }
+  ]
+}

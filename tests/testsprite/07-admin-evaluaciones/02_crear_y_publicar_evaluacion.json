@@ -1,0 +1,16 @@
+{
+  "$schema": "https://raw.githubusercontent.com/TestSprite/testsprite-cli/v0.7.0/schemas/plan.schema.json",
+  "projectId": "c83c6336-38d5-42ed-a742-0c24077b6964",
+  "type": "frontend",
+  "name": "19 - Admin: Formulario de Creación y Publicación de Evaluaciones",
+  "planSteps": [
+    {
+      "type": "action",
+      "description": "En el panel de administración https://cuadernillos.avend.pe/admin, hacer clic en 'NUEVA EVALUACIÓN'."
+    },
+    {
+      "type": "assertion",
+      "description": "Verificar que se abra el modal de registro permitiendo seleccionar Proceso, Modalidad, Nivel, Área, Año, cargar los archivos PDF de Cuadernillo, Claves y Solucionario, y cambiar el estado a PUBLICADO o BORRADOR."
+    }
+  ]
+}

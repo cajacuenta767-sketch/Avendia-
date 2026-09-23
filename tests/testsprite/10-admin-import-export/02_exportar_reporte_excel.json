@@ -1,0 +1,16 @@
+{
+  "$schema": "https://raw.githubusercontent.com/TestSprite/testsprite-cli/v0.7.0/schemas/plan.schema.json",
+  "projectId": "c83c6336-38d5-42ed-a742-0c24077b6964",
+  "type": "frontend",
+  "name": "27 - Admin Excel: Exportación de Reporte Completo de Docentes",
+  "planSteps": [
+    {
+      "type": "action",
+      "description": "En la tabla de usuarios de https://cuadernillos.avend.pe/admin, hacer clic en el botón 'Exportar Excel'."
+    },
+    {
+      "type": "assertion",
+      "description": "Verificar que el sistema genere y descargue automáticamente el archivo .xlsx con el listado de docentes, estados, accesos y fechas de vigencia."
+    }
+  ]
+}

@@ -4,6 +4,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { UserFormModal, UserFormData } from '@/components/admin/modals/UserFormModal';
 import { AdminUserFormModal } from '@/components/admin/modals/AdminUserFormModal';
+import { BulkUserImportModal } from '@/components/admin/modals/BulkUserImportModal';
 import {
   getUsuariosAction,
   createUsuarioAction,
@@ -11,14 +12,19 @@ import {
   deleteUsuarioAction,
   extenderLicenciaAction,
   toggleUserStatusAction,
+  toggleDocenteTipoAccesoAction,
+  regenerateDocentePinAction,
   UsuarioDocenteItem,
 } from '@/services/usuariosService';
+import { condenseAccessBadges } from '@/utils/badgeUtils';
 import {
   getAdminUsersAction,
   updateAdminUserAction,
   deleteAdminUserAction,
   AdminUserItem,
 } from '@/services/adminService';
+import { exportDocentesToExcel, exportAdminsToExcel } from '@/lib/exportExcel';
+import { getUserWhatsAppLink } from '@/lib/whatsapp';
 
 import {
   MODALIDADES_LIST,
@@ -28,21 +34,128 @@ import {
   formatAccessBadge,
 } from '@/data/cascadingData';
 
+const formatToInputDate = (dateStr?: string | Date): string => {
+  const today = new Date().toISOString().split('T')[0];
+  if (!dateStr) return today;
+  if (dateStr instanceof Date) {
+    if (isNaN(dateStr.getTime())) return today;
+    return dateStr.toISOString().split('T')[0];
+  }
+  const str = String(dateStr).trim();
+  if (!str) return today;
+
+  if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
+    return str.substring(0, 10);
+  }
+
+  const ddMMyyyyMatch = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (ddMMyyyyMatch) {
+    const day = ddMMyyyyMatch[1].padStart(2, '0');
+    const month = ddMMyyyyMatch[2].padStart(2, '0');
+    const year = ddMMyyyyMatch[3];
+    return `${year}-${month}-${day}`;
+  }
+
+  const d = new Date(str);
+  if (!isNaN(d.getTime())) {
+    return d.toISOString().split('T')[0];
+  }
+
+  return today;
+};
+
+const getLocalTodayInputDate = (): string => {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, '0');
+  const day = String(today.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const calcEndDateExact = (
+  startDateStr: string,
+  option: '1_year' | '1_month' | '6_months' | 'custom'
+): string => {
+  const startClean = formatToInputDate(startDateStr);
+  if (option === 'custom') return startClean;
+  const d = new Date(startClean + 'T00:00:00');
+  if (isNaN(d.getTime())) return startClean;
+
+  let monthsToAdd = 0;
+  if (option === '1_year') monthsToAdd = 12;
+  else if (option === '6_months') monthsToAdd = 6;
+  else if (option === '1_month') monthsToAdd = 1;
+
+  const targetMonth = d.getMonth() + monthsToAdd;
+  d.setMonth(targetMonth);
+  if (d.getMonth() !== ((targetMonth % 12) + 12) % 12) {
+    d.setDate(0);
+  }
+
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
 export const UsuariosView: React.FC = () => {
   const [users, setUsers] = useState<UsuarioDocenteItem[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState('');
-  const [rolFilter, setRolFilter] = useState('TODOS');
-  const [periodoFilter, setPeriodoFilter] = useState('ESTA_SEMANA');
+  const [estadoFilter, setEstadoFilter] = useState<'TODOS' | 'ACTIVO' | 'EXPIRADO'>('TODOS');
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
+  const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const tableContainerRef = useRef<HTMLDivElement>(null);
+
+  const handleSearchSubmit = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    searchInputRef.current?.blur();
+    setTimeout(() => {
+      tableContainerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 120);
+  };
+
+  const resolveAdminName = (name?: string, email?: string): string => {
+    const emailLower = (email || '').toLowerCase();
+    if (emailLower === 'cajacuenta767@gmail.com' || emailLower === 'cajacuenta767') {
+      return 'Bryan';
+    }
+    return name && name.trim() ? name.trim() : 'Administrador';
+  };
+
   // Administrador actualmente conectado
-  const [adminUser, setAdminUser] = useState<{ name: string; role: string }>({
-    name: 'Juan Avend',
-    role: 'SUPERADMINISTRADOR',
+  const [adminUser, setAdminUser] = useState<{ name: string; email: string; role: string }>(() => {
+    if (typeof window !== 'undefined') {
+      const sessionStr = localStorage.getItem('admin_auth_session') || sessionStorage.getItem('admin_auth_session');
+      if (sessionStr) {
+        try {
+          const parsed = JSON.parse(sessionStr);
+          const emailLower = (parsed.email || '').toLowerCase();
+          const superList = ['cajacuenta767@gmail.com', 'avendoficial@gmail.com', 'avendocente@gmail.com', 'cajacuenta767', 'avendoficial', 'avendocente'];
+          const isSuper = superList.includes(emailLower) || (parsed.role || '').toUpperCase().includes('SUPER');
+          const finalName = resolveAdminName(parsed.name || parsed.usuario, emailLower);
+          return {
+            name: finalName,
+            email: emailLower,
+            role: isSuper ? 'SUPERADMINISTRADOR' : 'ADMINISTRADOR',
+          };
+        } catch {}
+      }
+    }
+    return {
+      name: 'Administrador',
+      email: '',
+      role: 'ADMINISTRADOR',
+    };
   });
 
-  const isSuperAdmin = adminUser.role.toUpperCase().includes('SUPER');
+  const superAdmins = ['cajacuenta767@gmail.com', 'avendocente@gmail.com', 'cajacuenta767', 'avendocente'];
+  const isSuperAdmin =
+    superAdmins.includes((adminUser.email || '').toLowerCase()) ||
+    adminUser.role.toUpperCase().includes('SUPER');
 
   const [adminTeam, setAdminTeam] = useState<AdminUserItem[]>([]);
   const [isAdminFormModalOpen, setIsAdminFormModalOpen] = useState(false);
@@ -61,9 +174,20 @@ export const UsuariosView: React.FC = () => {
     if (sessionStr) {
       try {
         const parsed = JSON.parse(sessionStr);
-        if (parsed.name) {
-          setAdminUser({ name: parsed.name, role: parsed.role || 'ADMINISTRADOR' });
+        const emailLower = (parsed.email || '').toLowerCase();
+        const isSuper = superAdmins.includes(emailLower) || (parsed.role || '').toUpperCase().includes('SUPER');
+        const finalName = resolveAdminName(parsed.name, emailLower);
+
+        if (parsed.name !== finalName) {
+          parsed.name = finalName;
+          localStorage.setItem('admin_auth_session', JSON.stringify(parsed));
         }
+
+        setAdminUser({
+          name: finalName,
+          email: emailLower,
+          role: isSuper ? 'SUPERADMINISTRADOR' : 'ADMINISTRADOR',
+        });
       } catch {}
     }
     loadAdminTeam();
@@ -97,6 +221,10 @@ export const UsuariosView: React.FC = () => {
     user: UsuarioDocenteItem | null;
     nombre: string;
     email: string;
+    telefono: string;
+    pin: string;
+    region: string;
+    institucionEducativa: string;
     modalidad: string;
     nivel: string;
     selectedAreaInput: string;
@@ -110,15 +238,20 @@ export const UsuariosView: React.FC = () => {
     user: null,
     nombre: '',
     email: '',
+    telefono: '',
+    pin: '',
+    region: 'Lima',
+    institucionEducativa: '',
     modalidad: 'EBR',
     nivel: 'INICIAL',
-    selectedAreaInput: 'Educación Inicial',
+    selectedAreaInput: 'General',
     areas: [],
-    duracionOption: '6_months',
+    duracionOption: '1_year',
     fechaInicio: new Date().toISOString().split('T')[0],
     fechaFin: new Date().toISOString().split('T')[0],
-    tiposAcceso: { Ascenso: true, Nombramiento: true, Directivo: true },
+    tiposAcceso: { Ascenso: false, Nombramiento: false, Directivo: false },
   });
+  const [visiblePins, setVisiblePins] = useState<Set<string>>(() => new Set());
 
   // Modal para Ver Detalles de Auditoría (👁️ Botón 3)
   const [detailModal, setDetailModal] = useState<{
@@ -212,6 +345,35 @@ export const UsuariosView: React.FC = () => {
     }
   };
 
+  const handle1ClickToggleAccess = async (userId: string, tipo: 'Ascenso' | 'Nombramiento' | 'Directivo') => {
+    // Actualización optimista instantánea (<1ms)
+    setUsers((prev) =>
+      prev.map((item) => {
+        if (item.id !== userId) return item;
+        const currentAcc = [...(item.tiposAcceso || [])];
+        const idx = currentAcc.indexOf(tipo);
+        if (idx >= 0) currentAcc.splice(idx, 1);
+        else currentAcc.push(tipo);
+
+        const isNowActive = currentAcc.length > 0;
+        return {
+          ...item,
+          tiposAcceso: currentAcc,
+          estado: isNowActive ? 'PREMIUM' : 'VENCIDO',
+        };
+      })
+    );
+
+    const res = await toggleDocenteTipoAccesoAction(userId, tipo);
+    if (res.success) {
+      showToast(`⚡ Acceso '${tipo}' actualizado en 1-clic`);
+      await loadUsers();
+    } else {
+      showToast(`❌ ${res.error.message}`);
+      await loadUsers();
+    }
+  };
+
   useEffect(() => {
     loadUsers();
   }, []);
@@ -220,6 +382,8 @@ export const UsuariosView: React.FC = () => {
     const res = await createUsuarioAction({
       nombre: data.fullName,
       email: data.email,
+      telefono: data.telefono,
+      pin: data.pin,
       modalidad: data.modalidad,
       nivel: data.nivel,
       areas: data.areas,
@@ -242,24 +406,66 @@ export const UsuariosView: React.FC = () => {
     const mod = user.modalidad || 'EBR';
     const niv = user.nivel || 'INICIAL';
     const areasAvail = AREAS_POR_MODALIDAD_NIVEL[mod as ModalidadKey]?.[niv] || [];
-    const initialAreas = user.areas && user.areas.length > 0 ? user.areas : (areasAvail[0] ? [areasAvail[0]] : []);
+    const parsedUserAreas = (Array.isArray(user.areas) ? user.areas : [])
+      .map((a: any) => (a !== null && a !== undefined ? String(a).trim() : ''))
+      .filter(Boolean);
+    const initialAreas = parsedUserAreas.length > 0 ? parsedUserAreas : (areasAvail[0] ? [areasAvail[0]] : []);
 
-    const todayStr = new Date().toISOString().split('T')[0];
+    const startDateInput = formatToInputDate(user.fechaInicio);
+    // Al editar, conservar la vigencia real almacenada. Solo los botones de
+    // duración o una edición manual pueden cambiar la fecha de finalización.
+    const durOption: '1_year' | '1_month' | '6_months' | 'custom' = 'custom';
+    const endDateInput = formatToInputDate(user.fechaFin);
+
+    const cleanPhone = (user.telefono && !user.telefono.startsWith('USR-') && user.telefono.replace(/[^0-9]/g, '').length >= 8)
+      ? user.telefono
+      : '';
+    const userTipos = Array.isArray(user.tiposAcceso) && user.tiposAcceso.length > 0
+      ? user.tiposAcceso
+      : ['Ascenso', 'Nombramiento', 'Directivo'];
 
     setEditModal({
       isOpen: true,
       user,
       nombre: user.nombre,
       email: user.email,
+      telefono: cleanPhone,
+      // El PIN existente no se expone en el formulario. Vacío significa conservarlo.
+      pin: '',
+      region: user.region || 'Lima',
+      institucionEducativa: user.institucionEducativa || '',
       modalidad: mod,
       nivel: niv,
       selectedAreaInput: areasAvail[0] || '—',
       areas: initialAreas,
-      duracionOption: '6_months',
-      fechaInicio: user.fechaInicio ? user.fechaInicio.split(' ')[0] : todayStr,
-      fechaFin: user.fechaFin ? user.fechaFin.split(' ')[0] : todayStr,
-      tiposAcceso: { Ascenso: true, Nombramiento: true, Directivo: true },
+      duracionOption: durOption,
+      fechaInicio: startDateInput,
+      fechaFin: endDateInput,
+      tiposAcceso: {
+        Ascenso: userTipos.includes('Ascenso'),
+        Nombramiento: userTipos.includes('Nombramiento'),
+        Directivo: userTipos.includes('Directivo'),
+      },
     });
+  };
+
+  const handleRegeneratePersistentPin = async (id: string, nombre: string) => {
+    if (!window.confirm(`¿Regenerar el PIN persistente de ${nombre}? El PIN anterior dejará de funcionar inmediatamente.`)) return;
+
+    const result = await regenerateDocentePinAction(id);
+    if (!result.success) {
+      showToast(`❌ ${result.error.message}`);
+      return;
+    }
+
+    setUsers((current) => current.map((user) => (
+      user.id === id ? { ...user, pin: result.data.pin } : user
+    )));
+    setEditModal((current) => (
+      current.user?.id === id ? { ...current, pin: result.data.pin } : current
+    ));
+    setVisiblePins((current) => new Set(current).add(id));
+    showToast(`🔑 Nuevo PIN persistente generado para ${nombre.split(' ')[0]}: ${result.data.pin}`);
   };
 
   const areasDisponiblesEdicion = useMemo(() => {
@@ -313,7 +519,10 @@ export const UsuariosView: React.FC = () => {
 
     const prefixToClear = `${editModal.modalidad} - ${nivelLabel} - `;
     setEditModal((prev) => {
-      const filtered = prev.areas.filter((b) => !b.startsWith(prefixToClear));
+      const currentAreas = (Array.isArray(prev.areas) ? prev.areas : [])
+        .map((b: any) => (b !== null && b !== undefined ? String(b).trim() : ''))
+        .filter(Boolean);
+      const filtered = currentAreas.filter((b) => !b.startsWith(prefixToClear));
       if (!filtered.includes(targetBadge)) {
         return { ...prev, areas: [...filtered, targetBadge] };
       }
@@ -330,8 +539,11 @@ export const UsuariosView: React.FC = () => {
       badgeToAdd = formatAccessBadge(editModal.modalidad, editModal.nivel, areaSel);
     }
     if (!badgeToAdd) return;
-    if (!editModal.areas.includes(badgeToAdd)) {
-      const nextAreas = [...editModal.areas, badgeToAdd];
+    const currentAreas = (Array.isArray(editModal.areas) ? editModal.areas : [])
+      .map((b: any) => (b !== null && b !== undefined ? String(b).trim() : ''))
+      .filter(Boolean);
+    if (!currentAreas.includes(badgeToAdd)) {
+      const nextAreas = [...currentAreas, badgeToAdd];
 
       const modKey = editModal.modalidad as ModalidadKey;
       const list = NIVELES_POR_MODALIDAD_DATA[modKey] || [];
@@ -359,7 +571,9 @@ export const UsuariosView: React.FC = () => {
   const handleRemoverAreaEdicion = (areaToRemove: string) => {
     setEditModal((prev) => ({
       ...prev,
-      areas: prev.areas.filter((a) => a !== areaToRemove),
+      areas: (Array.isArray(prev.areas) ? prev.areas : [])
+        .map((a: any) => (a !== null && a !== undefined ? String(a).trim() : ''))
+        .filter((a) => Boolean(a) && a !== areaToRemove),
     }));
   };
 
@@ -388,15 +602,46 @@ export const UsuariosView: React.FC = () => {
       .filter(([_, val]) => val)
       .map(([key]) => key);
 
+    const originalStartDate = formatToInputDate(editModal.user.fechaInicio);
+    const originalEndDate = formatToInputDate(editModal.user.fechaFin);
+    const subscriptionDatesChanged =
+      editModal.fechaInicio !== originalStartDate || editModal.fechaFin !== originalEndDate;
+    const selectedEndDate = new Date(`${editModal.fechaFin}T12:00:00`);
+    const willBeActive = !Number.isNaN(selectedEndDate.getTime()) && selectedEndDate > new Date();
+
+    // La vista refleja la vigencia elegida; el servidor vuelve a validarla antes de guardar.
+    setUsers((prev) =>
+      prev.map((item) => {
+        if (item.id !== editModal.user?.id) return item;
+        return {
+          ...item,
+          nombre: editModal.nombre,
+          email: editModal.email,
+          telefono: editModal.telefono,
+          pin: editModal.pin.trim() || item.pin,
+          modalidad: editModal.modalidad,
+          nivel: editModal.nivel,
+          areas: editModal.areas,
+          tiposAcceso: selectedTiposAcceso,
+          fechaInicio: editModal.fechaInicio,
+          fechaFin: editModal.fechaFin,
+          estado: willBeActive ? 'PREMIUM' : 'VENCIDO',
+        };
+      })
+    );
+
     const res = await updateUsuarioAction(editModal.user.id, {
       nombre: editModal.nombre,
       email: editModal.email,
+      telefono: editModal.telefono,
+      pin: editModal.pin.trim() || undefined,
       modalidad: editModal.modalidad,
       nivel: editModal.nivel,
       areas: editModal.areas.length > 0 ? editModal.areas : [areasDisponiblesEdicion[0]],
       tiposAcceso: selectedTiposAcceso,
       fechaInicio: editModal.fechaInicio,
       fechaFin: editModal.fechaFin,
+      renewSubscription: subscriptionDatesChanged,
       modificadoPor: adminUser.name,
     });
 
@@ -408,14 +653,18 @@ export const UsuariosView: React.FC = () => {
         user: null,
         nombre: '',
         email: '',
+        telefono: '',
+        pin: '',
+        region: 'Lima',
+        institucionEducativa: '',
         modalidad: 'EBR',
         nivel: 'INICIAL',
-        selectedAreaInput: 'Educación Inicial',
+        selectedAreaInput: 'General',
         areas: [],
-        duracionOption: '6_months',
+        duracionOption: '1_year',
         fechaInicio: new Date().toISOString().split('T')[0],
         fechaFin: new Date().toISOString().split('T')[0],
-        tiposAcceso: { Ascenso: true, Nombramiento: true, Directivo: true },
+        tiposAcceso: { Ascenso: false, Nombramiento: false, Directivo: false },
       });
     } else {
       showToast(`❌ ${res.error.message}`);
@@ -424,16 +673,30 @@ export const UsuariosView: React.FC = () => {
 
   // Botón 2: ⏸️ / ▶️ Pausar o Reactivar Estado en PostgreSQL
   const handleTogglePausa = async (user: UsuarioDocenteItem) => {
+    // Actualización optimista instantánea en la interfaz (<1ms)
+    const nextVencido = user.estado !== 'VENCIDO';
+    setUsers((prev) =>
+      prev.map((item) => {
+        if (item.id !== user.id) return item;
+        return {
+          ...item,
+          estado: nextVencido ? 'VENCIDO' : 'PREMIUM',
+          tiposAcceso: nextVencido ? [] : ['Ascenso', 'Nombramiento', 'Directivo'],
+        };
+      })
+    );
+
     const res = await toggleUserStatusAction(user.id, adminUser.name);
     if (res.success) {
       await loadUsers();
       if (res.data.nuevoEstado === 'VENCIDO') {
         showToast(`⏸️ Acceso de ${user.nombre.split(' ')[0]} pausado por ${adminUser.name}.`);
       } else {
-        showToast(`▶️ Acceso de ${user.nombre.split(' ')[0]} reactivado por ${adminUser.name}.`);
+        showToast(`▶️ Acceso de ${user.nombre.split(' ')[0]} reactivado por 1 año por ${adminUser.name}.`);
       }
     } else {
       showToast(`❌ ${res.error.message}`);
+      await loadUsers();
     }
   };
 
@@ -446,7 +709,31 @@ export const UsuariosView: React.FC = () => {
   };
 
   const handleExportarExcel = () => {
-    showToast('📊 Exportando reporte completo de Usuarios y Accesos a Excel...');
+    if (activeSubTab === 'docentes') {
+      const dataToExport = filteredUsers.length > 0 ? filteredUsers : users;
+      if (!dataToExport || dataToExport.length === 0) {
+        showToast('ℹ️ No hay registros de docentes disponibles para exportar.');
+        return;
+      }
+      const success = exportDocentesToExcel(dataToExport);
+      if (success) {
+        showToast(`📊 Reporte de ${dataToExport.length} docente(s) exportado exitosamente a Excel.`);
+      } else {
+        showToast('❌ Error al exportar los datos a Excel.');
+      }
+    } else {
+      const dataToExport = filteredAdminTeam.length > 0 ? filteredAdminTeam : adminTeam;
+      if (!dataToExport || dataToExport.length === 0) {
+        showToast('ℹ️ No hay administradores secundarios para exportar.');
+        return;
+      }
+      const success = exportAdminsToExcel(dataToExport);
+      if (success) {
+        showToast(`📊 Reporte de ${dataToExport.length} administrador(es) exportado exitosamente a Excel.`);
+      } else {
+        showToast('❌ Error al exportar los datos a Excel.');
+      }
+    }
   };
 
   const confirmDeleteUser = async () => {
@@ -471,27 +758,101 @@ export const UsuariosView: React.FC = () => {
     return set;
   }, [adminTeam]);
 
+  const countActivos = useMemo(() => {
+    return users.filter((u) => !adminEmailsSet.has((u.email || '').toLowerCase().trim()) && u.estado === 'PREMIUM').length;
+  }, [users, adminEmailsSet]);
+
+  const countExpirados = useMemo(() => {
+    return users.filter((u) => !adminEmailsSet.has((u.email || '').toLowerCase().trim()) && u.estado === 'VENCIDO').length;
+  }, [users, adminEmailsSet]);
+
   const filteredUsers = useMemo(() => {
-    return users.filter((u) => {
+    const list = users.filter((u) => {
       const emailClean = (u.email || '').toLowerCase().trim();
       // Excluir a cualquier usuario que ya pertenezca al Equipo de Administradores
       if (adminEmailsSet.has(emailClean)) {
         return false;
       }
 
-      const query = searchQuery.toLowerCase().trim();
+      // Filtro por Estado (Activo / Expirado)
+      if (estadoFilter === 'ACTIVO' && u.estado !== 'PREMIUM') return false;
+      if (estadoFilter === 'EXPIRADO' && u.estado !== 'VENCIDO') return false;
+
+      const query = searchQuery.toLocaleLowerCase().trim();
       if (!query) return true;
+
+      const queryDigits = query.replace(/[^0-9]/g, '');
+      const userNumberDigits = [u.telefono, u.dni]
+        .filter((value): value is string => Boolean(value))
+        .map((value) => value.replace(/[^0-9]/g, ''));
+      const matchPhone = queryDigits.length >= 2 && userNumberDigits.some((value) => value.includes(queryDigits));
+
       return (
-        u.nombre.toLowerCase().includes(query) ||
-        u.email.toLowerCase().includes(query) ||
+        (u.nombre || '').toLocaleLowerCase().includes(query) ||
+        (u.email || '').toLocaleLowerCase().includes(query) ||
+        (u.telefono || '').toLocaleLowerCase().includes(query) ||
+        (u.dni || '').toLocaleLowerCase().includes(query) ||
+        matchPhone ||
+        (u.region && u.region.toLowerCase().includes(query)) ||
+        (u.institucionEducativa && u.institucionEducativa.toLowerCase().includes(query)) ||
         (u.creadoPor && u.creadoPor.toLowerCase().includes(query)) ||
         (u.modificadoPor && u.modificadoPor.toLowerCase().includes(query))
       );
     });
-  }, [users, adminEmailsSet, searchQuery]);
+
+    // Las coincidencias exactas aparecen primero. Dentro del mismo nivel de
+    // coincidencia, conservar el orden de alta más reciente del servidor.
+    return list.sort((a, b) => {
+      const query = searchQuery.toLocaleLowerCase().trim();
+      const queryDigits = query.replace(/[^0-9]/g, '');
+      const rank = (user: UsuarioDocenteItem): number => {
+        if (!query) return 0;
+        const textValues = [user.email, user.nombre, user.telefono, user.dni]
+          .filter((value): value is string => Boolean(value))
+          .map((value) => value.toLocaleLowerCase().trim());
+        const digitValues = [user.telefono, user.dni]
+          .filter((value): value is string => Boolean(value))
+          .map((value) => value.replace(/[^0-9]/g, ''));
+
+        if (textValues.includes(query) || (queryDigits && digitValues.includes(queryDigits))) return 0;
+        if (textValues.some((value) => value.startsWith(query)) || (queryDigits && digitValues.some((value) => value.startsWith(queryDigits)))) return 1;
+        return 2;
+      };
+
+      const rankDifference = rank(a) - rank(b);
+      if (rankDifference !== 0) return rankDifference;
+
+      const aCreatedAt = a.createdAt ? Date.parse(a.createdAt) : 0;
+      const bCreatedAt = b.createdAt ? Date.parse(b.createdAt) : 0;
+      const createdAtDifference = bCreatedAt - aCreatedAt;
+      if (createdAtDifference !== 0) return createdAtDifference;
+
+      return b.id.localeCompare(a.id);
+    });
+  }, [users, adminEmailsSet, searchQuery, estadoFilter, activeSubTab]);
+
+  const ITEMS_PER_PAGE = 100;
+  const totalPages = Math.max(1, Math.ceil(filteredUsers.length / ITEMS_PER_PAGE));
+  const paginatedUsers = useMemo(() => {
+    const start = (currentPage - 1) * ITEMS_PER_PAGE;
+    return filteredUsers.slice(start, start + ITEMS_PER_PAGE);
+  }, [filteredUsers, currentPage]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, activeSubTab, estadoFilter]);
 
   const filteredAdminTeam = useMemo(() => {
+    const superadminEmails = ['cajacuenta767@gmail.com', 'avendoficial@gmail.com', 'cajacuenta767', 'avendoficial'];
     return adminTeam.filter((adm) => {
+      // Excluir Superadministradores de la vista de la tabla
+      if (
+        adm.rol === 'SUPERADMINISTRADOR' ||
+        superadminEmails.includes((adm.email || '').toLowerCase()) ||
+        superadminEmails.includes((adm.usuario || '').toLowerCase())
+      ) {
+        return false;
+      }
       const q = searchQuery.toLowerCase().trim();
       if (!q) return true;
       return (
@@ -504,10 +865,10 @@ export const UsuariosView: React.FC = () => {
   }, [adminTeam, searchQuery]);
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-12">
+    <div className="space-y-4 sm:space-y-6 max-w-7xl mx-auto pb-8 sm:pb-12 min-w-0">
       {/* 1. Header con Formato SaaS */}
-      <div className="bg-white dark:bg-slate-900 rounded-3xl border border-gray-100 dark:border-slate-800 p-6 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div className="space-y-1">
+      <div className="bg-white dark:bg-slate-900 rounded-3xl border border-gray-100 dark:border-slate-800 p-4 sm:p-6 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="space-y-1 min-w-0">
           <span className="text-[10px] font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
             PANEL DE ADMINISTRACIÓN AVEND
           </span>
@@ -520,14 +881,26 @@ export const UsuariosView: React.FC = () => {
         </div>
 
         {isSuperAdmin ? (
-          <div className="flex items-center space-x-2">
+          <div className="grid grid-cols-1 min-[460px]:grid-cols-2 sm:flex gap-2 w-full sm:w-auto">
+            <button
+              type="button"
+              onClick={() => setIsBulkImportOpen(true)}
+              className="w-full sm:w-auto justify-center px-4 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs uppercase rounded-2xl shadow-md shadow-emerald-500/20 transition-all flex items-center space-x-2 cursor-pointer"
+              title="Importar masivamente docentes desde un archivo Excel o CSV"
+            >
+              <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              <span>IMPORTAR EXCEL</span>
+            </button>
+
             <button
               type="button"
               onClick={() => {
                 setAdminToEdit(null);
                 setIsAdminFormModalOpen(true);
               }}
-              className="px-4 py-3 bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs uppercase rounded-2xl shadow-md shadow-purple-500/20 transition-all flex items-center space-x-2 cursor-pointer shrink-0"
+              className="w-full sm:w-auto justify-center px-4 py-3 bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs uppercase rounded-2xl shadow-md shadow-purple-500/20 transition-all flex items-center space-x-2 cursor-pointer"
               title="Registrar nuevo Administrador en el equipo interno"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -538,7 +911,7 @@ export const UsuariosView: React.FC = () => {
             <button
               type="button"
               onClick={() => setIsUserModalOpen(true)}
-              className="px-5 py-3 bg-[#4f46e5] hover:bg-[#4338ca] text-white font-extrabold text-xs uppercase rounded-2xl shadow-md transition-all flex items-center space-x-2 cursor-pointer shrink-0"
+              className="w-full min-[460px]:col-span-2 sm:w-auto justify-center px-5 py-3 bg-[#4f46e5] hover:bg-[#4338ca] text-white font-extrabold text-xs uppercase rounded-2xl shadow-md transition-all flex items-center space-x-2 cursor-pointer"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
@@ -547,22 +920,36 @@ export const UsuariosView: React.FC = () => {
             </button>
           </div>
         ) : (
-          <button
-            type="button"
-            onClick={() => setIsUserModalOpen(true)}
-            className="px-5 py-3 bg-[#4f46e5] hover:bg-[#4338ca] text-white font-extrabold text-xs uppercase rounded-2xl shadow-md transition-all flex items-center space-x-2 cursor-pointer shrink-0"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
-            </svg>
-            <span>AGREGAR USUARIO</span>
-          </button>
+          <div className="flex flex-col min-[460px]:flex-row gap-2 w-full sm:w-auto">
+            <button
+              type="button"
+              onClick={() => setIsBulkImportOpen(true)}
+              className="w-full sm:w-auto justify-center px-4 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs uppercase rounded-2xl shadow-md shadow-emerald-500/20 transition-all flex items-center space-x-2 cursor-pointer"
+              title="Importar masivamente docentes desde un archivo Excel o CSV"
+            >
+              <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              <span>IMPORTAR EXCEL</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsUserModalOpen(true)}
+              className="w-full sm:w-auto justify-center px-5 py-3 bg-[#4f46e5] hover:bg-[#4338ca] text-white font-extrabold text-xs uppercase rounded-2xl shadow-md transition-all flex items-center space-x-2 cursor-pointer"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+              </svg>
+              <span>AGREGAR USUARIO</span>
+            </button>
+          </div>
         )}
       </div>
 
       {/* 2. Banner Informativo Dinámico según el Rol del Usuario Conectado */}
-      <div className="bg-indigo-50/70 dark:bg-slate-800/70 border border-indigo-100 dark:border-slate-700 text-indigo-950 dark:text-slate-200 rounded-2xl p-4 text-xs flex items-center justify-between shadow-2xs">
-        <div className="flex items-center space-x-3">
+      <div className="bg-indigo-50/70 dark:bg-slate-800/70 border border-indigo-100 dark:border-slate-700 text-indigo-950 dark:text-slate-200 rounded-2xl p-4 text-xs flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 shadow-2xs">
+        <div className="flex items-start space-x-3 min-w-0">
           <div className="w-6 h-6 rounded-full bg-indigo-600 text-white font-black text-xs flex items-center justify-center shrink-0">
             i
           </div>
@@ -576,11 +963,11 @@ export const UsuariosView: React.FC = () => {
 
         {/* Sub-pestañas Exclusivas para Superadministrador */}
         {isSuperAdmin && (
-          <div className="flex items-center space-x-1.5 bg-white dark:bg-slate-900 p-1.5 rounded-xl border border-gray-200 dark:border-slate-800 shadow-2xs shrink-0 ml-4">
+          <div className="responsive-control-group bg-white dark:bg-slate-900 p-1.5 rounded-xl border border-gray-200 dark:border-slate-800 shadow-2xs w-full lg:w-auto lg:min-w-[290px]" style={{ '--responsive-control-columns': 2 } as React.CSSProperties}>
             <button
               type="button"
               onClick={() => setActiveSubTab('docentes')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer ${
+              className={`w-full px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer ${
                 activeSubTab === 'docentes'
                   ? 'bg-indigo-600 text-white shadow-2xs'
                   : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
@@ -591,13 +978,13 @@ export const UsuariosView: React.FC = () => {
             <button
               type="button"
               onClick={() => setActiveSubTab('admin_team')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer flex items-center space-x-1.5 ${
+              className={`w-full px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer flex items-center justify-center space-x-1.5 ${
                 activeSubTab === 'admin_team'
                   ? 'bg-purple-600 text-white shadow-2xs'
                   : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
               }`}
             >
-              <span>🛡️ Equipo Admin ({adminTeam.length})</span>
+              <span>🛡️ Equipo Admin ({filteredAdminTeam.length})</span>
             </button>
           </div>
         )}
@@ -605,8 +992,8 @@ export const UsuariosView: React.FC = () => {
 
       {/* Toast Notificación */}
       {toastMessage && (
-        <div className="p-3.5 rounded-xl bg-slate-900 text-white font-bold text-xs shadow-xl border border-slate-800 flex items-center justify-between animate-in fade-in duration-200">
-          <span>{toastMessage}</span>
+        <div className="p-3.5 rounded-xl bg-slate-900 text-white font-bold text-xs shadow-xl border border-slate-800 flex items-start justify-between gap-3 animate-in fade-in duration-200">
+          <span className="min-w-0 break-words">{toastMessage}</span>
           <button onClick={() => setToastMessage(null)} className="text-slate-400 hover:text-white">
             ✕
           </button>
@@ -614,45 +1001,81 @@ export const UsuariosView: React.FC = () => {
       )}
 
       {/* 3. Barra de Filtros Completa */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-100 dark:border-slate-800 p-4 shadow-xs flex flex-col md:flex-row items-center justify-between gap-3">
-        <div className="relative flex-1 w-full">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-100 dark:border-slate-800 p-3 sm:p-4 shadow-xs flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
+        <form onSubmit={handleSearchSubmit} className="relative flex-1 w-full">
           <svg className="w-4 h-4 absolute left-3.5 top-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
           </svg>
           <input
-            type="text"
+            ref={searchInputRef}
+            type="search"
+            enterKeyHint="search"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={activeSubTab === 'docentes' ? "Buscar docente por nombre o correo..." : "Buscar administrador por nombre, correo o usuario..."}
-            className="w-full pl-10 pr-4 py-2.5 bg-gray-50/60 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-800 dark:text-white outline-none focus:border-indigo-600 font-sans"
+            onInput={(e) => setSearchQuery(e.currentTarget.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                handleSearchSubmit(e);
+              }
+            }}
+            placeholder={activeSubTab === 'docentes' ? "🔍 Buscar docente por nombre, correo o celular (WhatsApp)..." : "🔍 Buscar administrador por nombre, correo o usuario..."}
+            className="w-full pl-10 pr-10 py-2.5 bg-gray-50/60 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-800 dark:text-white outline-none focus:border-indigo-600 font-sans"
           />
-        </div>
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => {
+                setSearchQuery('');
+                searchInputRef.current?.focus();
+              }}
+              title="Limpiar búsqueda"
+              className="absolute right-3 top-2.5 w-5 h-5 rounded-full bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-300 text-xs font-bold flex items-center justify-center cursor-pointer transition-colors"
+            >
+              ✕
+            </button>
+          )}
+        </form>
 
-        <div className="flex flex-wrap items-center justify-between sm:justify-end gap-2.5 w-full md:w-auto shrink-0">
+        <div className="flex flex-wrap items-center justify-start lg:justify-end gap-2.5 w-full lg:w-auto shrink-0">
           {activeSubTab === 'docentes' && (
             <>
-              <div className="flex items-center space-x-1">
-                <span className="text-[11px] font-bold text-slate-400">Rol</span>
-                <select
-                  value={rolFilter}
-                  onChange={(e) => setRolFilter(e.target.value)}
-                  className="bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 dark:text-white outline-none cursor-pointer"
+              {/* Botones de Filtro por Estado: Activo y Expirado */}
+              <div className="responsive-control-group bg-gray-100/80 dark:bg-slate-800 p-1 rounded-xl border border-gray-200 dark:border-slate-700" style={{ '--responsive-control-columns': 3 } as React.CSSProperties}>
+                <button
+                  type="button"
+                  onClick={() => setEstadoFilter('TODOS')}
+                  className={`w-full px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                    estadoFilter === 'TODOS'
+                      ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-2xs'
+                      : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                  }`}
                 >
-                  <option value="TODOS">Todos</option>
-                  <option value="PREMIUM">Premium</option>
-                </select>
-              </div>
-              <div className="flex items-center space-x-1">
-                <span className="text-[11px] font-bold text-slate-400">Periodo</span>
-                <select
-                  value={periodoFilter}
-                  onChange={(e) => setPeriodoFilter(e.target.value)}
-                  className="bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 dark:text-white outline-none cursor-pointer"
+                  Todos ({countActivos + countExpirados})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEstadoFilter('ACTIVO')}
+                  className={`w-full px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer flex items-center justify-center space-x-1.5 ${
+                    estadoFilter === 'ACTIVO'
+                      ? 'bg-emerald-600 text-white shadow-2xs'
+                      : 'text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50/50 dark:hover:bg-emerald-950/30'
+                  }`}
                 >
-                  <option value="ESTA_SEMANA">Esta semana</option>
-                  <option value="ESTE_MES">Este mes</option>
-                  <option value="TODOS">Todos los tiempos</option>
-                </select>
+                  <span className={`w-2 h-2 rounded-full ${estadoFilter === 'ACTIVO' ? 'bg-white' : 'bg-emerald-500'}`}></span>
+                  <span>Activos ({countActivos})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEstadoFilter('EXPIRADO')}
+                  className={`w-full px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer flex items-center justify-center space-x-1.5 ${
+                    estadoFilter === 'EXPIRADO'
+                      ? 'bg-rose-600 text-white shadow-2xs'
+                      : 'text-rose-700 dark:text-rose-400 hover:bg-rose-50/50 dark:hover:bg-rose-950/30'
+                  }`}
+                >
+                  <span className={`w-2 h-2 rounded-full ${estadoFilter === 'EXPIRADO' ? 'bg-white' : 'bg-rose-500'}`}></span>
+                  <span>Expirados ({countExpirados})</span>
+                </button>
               </div>
             </>
           )}
@@ -660,7 +1083,7 @@ export const UsuariosView: React.FC = () => {
           <button
             type="button"
             onClick={handleExportarExcel}
-            className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 hover:bg-gray-50 text-slate-700 dark:text-slate-200 font-extrabold text-xs px-3.5 py-2 rounded-xl transition-all shadow-2xs flex items-center space-x-1.5 cursor-pointer"
+            className="w-full sm:w-auto justify-center bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 hover:bg-gray-50 text-slate-700 dark:text-slate-200 font-extrabold text-xs px-3.5 py-2 rounded-xl transition-all shadow-2xs flex items-center space-x-1.5 cursor-pointer"
           >
             <span>📊 Exportar Excel</span>
           </button>
@@ -668,12 +1091,13 @@ export const UsuariosView: React.FC = () => {
       </div>
 
       {/* 4. Tabla de Control SaaS */}
-      <div className="bg-white dark:bg-slate-900 rounded-3xl border border-gray-100 dark:border-slate-800 overflow-hidden shadow-xs">
+      <div ref={tableContainerRef} id="tabla-docentes" className="bg-white dark:bg-slate-900 rounded-3xl border border-gray-100 dark:border-slate-800 overflow-hidden shadow-xs scroll-mt-24">
         <div className="overflow-x-auto">
           {activeSubTab === 'docentes' ? (
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-gray-50/80 dark:bg-slate-800/60 border-b border-gray-200/80 dark:border-slate-800 text-[10px] font-black uppercase tracking-wider text-slate-400">
+                <th className="p-4 w-12 text-center">#</th>
                 <th className="p-4">DOCENTE / CORREO</th>
                 <th className="p-4 text-center">MODALIDAD/NIVEL</th>
                 <th className="p-4">INICIO</th>
@@ -689,34 +1113,88 @@ export const UsuariosView: React.FC = () => {
             <tbody className="divide-y divide-gray-100 dark:divide-slate-800 text-xs">
               {filteredUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="p-10 text-center text-slate-400 font-bold">
+                  <td colSpan={9} className="p-10 text-center text-slate-400 font-bold">
                     No se encontraron registros de accesos.
                   </td>
                 </tr>
               ) : (
-                filteredUsers.map((u) => {
+                paginatedUsers.map((u, idx) => {
+                  const itemIndex = (currentPage - 1) * ITEMS_PER_PAGE + idx + 1;
                   const isVencido = u.estado === 'VENCIDO';
-                  const areasList = u.areas || [];
+                  const areasList = condenseAccessBadges(u.areas || []);
 
-                  const editorNombre = u.modificadoPor || u.creadoPor || 'Juan Avend';
-                  const creadorNombre = u.creadoPor || 'Juan Avend';
+                  const editorNombre = u.modificadoPor || u.creadoPor || 'Administrador';
+                  const creadorNombre = u.creadoPor || 'Administrador';
                   const tieneEdicionDiferente = u.modificadoPor && u.modificadoPor !== u.creadoPor;
 
                   return (
                     <tr key={u.id} className="hover:bg-gray-50/60 dark:hover:bg-slate-800/40 transition-colors">
-                      {/* 0. DOCENTE / CORREO */}
+                      {/* # NÚMERO CORRELATIVO */}
+                      <td className="p-4 text-center font-mono font-bold text-slate-400 dark:text-slate-500 text-xs">
+                        {itemIndex}
+                      </td>
+
+                      {/* 0. DOCENTE / CORREO / CELULAR / PIN */}
                       <td className="p-4">
-                        <div className="space-y-0.5">
-                          <p className="font-extrabold text-slate-900 dark:text-white truncate max-w-[200px]">
+                        <div className="space-y-1">
+                          <p className="font-extrabold text-slate-900 dark:text-white truncate max-w-[220px]">
                             {u.nombre}
                           </p>
-                          <p className="text-[11px] font-semibold text-blue-600 dark:text-blue-400 font-mono truncate max-w-[200px]">
+                          <p className="text-[11px] font-semibold text-blue-600 dark:text-blue-400 font-mono truncate max-w-[220px]">
                             {u.email}
                           </p>
+                          <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                            {(u.telefono || (u.dni && !u.dni.startsWith('USR-') && u.dni.replace(/[^0-9]/g, '').length >= 6)) && (
+                              <a
+                                href={getUserWhatsAppLink(u.telefono || u.dni, u.nombre, u.email, u.pin)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title={`Enviar mensaje de WhatsApp a ${u.nombre} (${u.telefono || u.dni})`}
+                                className="inline-flex items-center space-x-1 text-[10px] font-extrabold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/70 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 px-2 py-0.5 rounded-lg border border-emerald-200/80 dark:border-emerald-800 shadow-2xs cursor-pointer active:scale-95 transition-all"
+                              >
+                                <span>📱</span>
+                                <span className="font-mono">{u.telefono || u.dni}</span>
+                              </a>
+                            )}
+                            {u.pin && u.pin.trim() !== '' ? (
+                              <div className="inline-flex items-center overflow-hidden rounded-lg border border-indigo-200/80 bg-indigo-50 text-[10px] font-black text-indigo-700 shadow-2xs dark:border-indigo-800 dark:bg-indigo-950/70 dark:text-indigo-300">
+                                <button
+                                  type="button"
+                                  onClick={() => setVisiblePins((current) => {
+                                    const next = new Set(current);
+                                    if (next.has(u.id)) next.delete(u.id);
+                                    else next.add(u.id);
+                                    return next;
+                                  })}
+                                  title={visiblePins.has(u.id) ? 'Ocultar PIN persistente' : 'Mostrar PIN persistente'}
+                                  aria-label={visiblePins.has(u.id) ? `Ocultar PIN de ${u.nombre}` : `Mostrar PIN de ${u.nombre}`}
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 hover:bg-indigo-100 dark:hover:bg-indigo-900/60"
+                                >
+                                  <span>{visiblePins.has(u.id) ? '🙈' : '👁️'}</span>
+                                  <span>PIN:</span>
+                                  <span className="min-w-[30px] font-mono">{visiblePins.has(u.id) ? u.pin : '••••'}</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+                                      navigator.clipboard.writeText(u.pin);
+                                    }
+                                    showToast(`📋 PIN persistente ${u.pin} de ${u.nombre.split(' ')[0]} copiado.`);
+                                  }}
+                                  title="Copiar PIN persistente"
+                                  aria-label={`Copiar PIN persistente de ${u.nombre}`}
+                                  className="border-l border-indigo-200 px-1.5 py-0.5 hover:bg-indigo-100 dark:border-indigo-800 dark:hover:bg-indigo-900/60"
+                                >
+                                  📋
+                                </button>
+                              </div>
+                            ) : null}
+                          </div>
                         </div>
                       </td>
 
-                      {/* 1. MODALIDAD/NIVEL (Unificado con Botón Interactivo Ver accesos (N)) */}
+                      {/* 1. MODALIDAD/NIVEL */}
                       <td className="p-4 text-center whitespace-nowrap">
                         <button
                           type="button"
@@ -784,18 +1262,26 @@ export const UsuariosView: React.FC = () => {
                             ✏️
                           </button>
 
-                          {/* BOTÓN 2: PAUSAR O REANUDAR */}
+                          {/* BOTÓN 2: PAUSAR O REANUDAR (ACCESO DIRECTO 1-CLIC) */}
                           <button
                             type="button"
                             onClick={() => handleTogglePausa(u)}
-                            title={isVencido ? 'Reactivar suscripción Premium' : 'Pausar o suspender suscripción'}
-                            className={`w-8 h-8 rounded-full border flex items-center justify-center text-xs transition-all shadow-2xs cursor-pointer active:scale-95 ${
+                            title={isVencido ? 'Reactivar suscripción (Otorgar 1 año completo)' : 'Pausar / suspender suscripción'}
+                            className={`w-8 h-8 rounded-full border flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95 ${
                               isVencido
-                                ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                                : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100'
+                                ? 'border-emerald-300 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/80 dark:border-emerald-700'
+                                : 'border-blue-300 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/80 dark:border-blue-700'
                             }`}
                           >
-                            {isVencido ? '▶️' : '⏸️'}
+                            {isVencido ? (
+                              <svg className="w-3.5 h-3.5 fill-emerald-600 dark:fill-emerald-400 ml-0.5" viewBox="0 0 24 24">
+                                <path d="M8 5v14l11-7z" />
+                              </svg>
+                            ) : (
+                              <svg className="w-3.5 h-3.5 fill-blue-600 dark:fill-blue-400" viewBox="0 0 24 24">
+                                <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+                              </svg>
+                            )}
                           </button>
 
                           {/* BOTÓN 3: VER DETALLES DE AUDITORÍA SAAS */}
@@ -819,6 +1305,7 @@ export const UsuariosView: React.FC = () => {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-purple-50/80 dark:bg-slate-800/60 border-b border-gray-200/80 dark:border-slate-800 text-[10px] font-black uppercase tracking-wider text-purple-900 dark:text-purple-300">
+                  <th className="p-4 w-12 text-center">#</th>
                   <th className="p-4">ADMINISTRADOR / CORREO</th>
                   <th className="p-4">USUARIO / LOGIN</th>
                   <th className="p-4">ROL DE ACCESO</th>
@@ -831,16 +1318,29 @@ export const UsuariosView: React.FC = () => {
               <tbody className="divide-y divide-gray-100 dark:divide-slate-800 text-xs">
                 {filteredAdminTeam.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="p-10 text-center text-slate-400 font-bold">
-                      No se encontraron administradores que coincidan con la búsqueda.
+                    <td colSpan={8} className="p-12 text-center text-slate-400">
+                      <div className="flex flex-col items-center justify-center space-y-2 max-w-md mx-auto">
+                        <span className="text-3xl">🛡️</span>
+                        <p className="font-extrabold text-slate-700 dark:text-slate-200 text-sm">
+                          No hay administradores secundarios delegados
+                        </p>
+                        <p className="text-xs text-slate-400 dark:text-slate-500">
+                          Los Superadministradores gestionan la plataforma de forma global. Utiliza el botón <span className="font-bold text-indigo-600 dark:text-indigo-400">+ Nuevo Administrador</span> para delegar accesos y módulos a nuevos administradores.
+                        </p>
+                      </div>
                     </td>
                   </tr>
                 ) : (
-                  filteredAdminTeam.map((adm) => {
+                  filteredAdminTeam.map((adm, idx) => {
                     const isPausado = adm.estado === 'PAUSADO';
 
                     return (
                       <tr key={adm.id} className="hover:bg-gray-50/60 dark:hover:bg-slate-800/40 transition-colors">
+                        {/* # NÚMERO CORRELATIVO */}
+                        <td className="p-4 text-center font-mono font-bold text-purple-400 dark:text-purple-500 text-xs">
+                          {idx + 1}
+                        </td>
+
                         {/* 0. ADMIN / CORREO */}
                         <td className="p-4">
                           <div className="space-y-0.5">
@@ -945,6 +1445,84 @@ export const UsuariosView: React.FC = () => {
             </table>
           )}
         </div>
+
+        {/* Controles de Paginación (100 docentes por página) */}
+        {activeSubTab === 'docentes' && filteredUsers.length > 0 && (
+          <div className="w-full p-3 sm:p-4 sm:px-6 border-t border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/60 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 text-xs text-slate-500 font-medium">
+            <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 min-w-0">
+              <span className="text-center sm:text-left">
+                Mostrando{' '}
+                <span className="font-extrabold text-slate-900 dark:text-white">
+                  {(currentPage - 1) * ITEMS_PER_PAGE + 1}
+                </span>{' '}
+                al{' '}
+                <span className="font-extrabold text-slate-900 dark:text-white">
+                  {Math.min(currentPage * ITEMS_PER_PAGE, filteredUsers.length)}
+                </span>{' '}
+                de{' '}
+                <span className="font-extrabold text-indigo-600 dark:text-indigo-400">
+                  {filteredUsers.length.toLocaleString()}
+                </span>{' '}
+                docentes
+              </span>
+              <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                ✓ Más recientes primero
+              </span>
+            </div>
+
+            {totalPages > 1 && (
+              <div className="grid grid-cols-2 min-[420px]:grid-cols-4 sm:flex items-center gap-1.5 w-full sm:w-auto">
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage(1)}
+                  disabled={currentPage === 1}
+                  aria-label="Primera página"
+                  className="w-full sm:w-auto px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30 transition-all cursor-pointer disabled:cursor-not-allowed text-[11px] whitespace-nowrap"
+                  title="Primera Página"
+                >
+                  « <span className="hidden sm:inline">Primera</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  aria-label="Página anterior"
+                  className="w-full sm:w-auto px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30 transition-all cursor-pointer disabled:cursor-not-allowed text-[11px] whitespace-nowrap"
+                >
+                  ‹ <span className="hidden sm:inline">Anterior</span>
+                </button>
+
+                <div className="col-span-2 min-[420px]:col-span-1 flex items-center justify-center space-x-1 px-2 font-bold text-slate-700 dark:text-slate-300 text-xs whitespace-nowrap">
+                  <span>Página</span>
+                  <span className="px-2 py-1 bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 rounded-lg text-indigo-600 dark:text-indigo-300 font-black">
+                    {currentPage}
+                  </span>
+                  <span>de {totalPages}</span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  aria-label="Página siguiente"
+                  className="w-full sm:w-auto px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30 transition-all cursor-pointer disabled:cursor-not-allowed text-[11px] whitespace-nowrap"
+                >
+                  <span className="hidden sm:inline">Siguiente </span>›
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage(totalPages)}
+                  disabled={currentPage === totalPages}
+                  aria-label="Última página"
+                  className="w-full sm:w-auto px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30 transition-all cursor-pointer disabled:cursor-not-allowed text-[11px] whitespace-nowrap"
+                  title="Última Página"
+                >
+                  <span className="hidden sm:inline">Última </span>»
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <UserFormModal
@@ -980,7 +1558,7 @@ export const UsuariosView: React.FC = () => {
               </div>
               <button
                 type="button"
-                onClick={() => setEditModal({ isOpen: false, user: null, nombre: '', email: '', modalidad: 'EBR', nivel: 'INICIAL', selectedAreaInput: 'Educación Inicial', areas: [], duracionOption: '6_months', fechaInicio: new Date().toISOString().split('T')[0], fechaFin: new Date().toISOString().split('T')[0], tiposAcceso: { Ascenso: true, Nombramiento: true, Directivo: true } })}
+                onClick={() => setEditModal({ isOpen: false, user: null, nombre: '', email: '', telefono: '', pin: '', region: 'Lima', institucionEducativa: '', modalidad: 'EBR', nivel: 'INICIAL', selectedAreaInput: 'General', areas: [], duracionOption: '1_year', fechaInicio: new Date().toISOString().split('T')[0], fechaFin: new Date().toISOString().split('T')[0], tiposAcceso: { Ascenso: false, Nombramiento: false, Directivo: false } })}
                 className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-400 hover:text-slate-700 flex items-center justify-center text-sm font-bold cursor-pointer"
               >
                 ✕
@@ -1010,6 +1588,82 @@ export const UsuariosView: React.FC = () => {
                     required
                     className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none focus:border-indigo-600"
                   />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300">Número de Celular / WhatsApp</label>
+                  <input
+                    type="tel"
+                    value={editModal.telefono}
+                    onChange={(e) => setEditModal((prev) => ({ ...prev, telefono: e.target.value }))}
+                    placeholder="Ej: 954562938 (Opcional)"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none focus:border-indigo-600 font-mono"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                      PIN persistente (opcional)
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (editModal.user) void handleRegeneratePersistentPin(editModal.user.id, editModal.nombre);
+                      }}
+                      className="text-[10px] text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 font-bold flex items-center space-x-1 cursor-pointer"
+                      title="Regenerar el PIN persistente"
+                    >
+                      <span>🎲 Regenerar</span>
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    value={editModal.pin}
+                    inputMode="numeric"
+                    pattern="[0-9]{4}"
+                    onChange={(e) => setEditModal((prev) => ({
+                      ...prev,
+                      pin: e.target.value.replace(/\D/g, '').slice(0, 4),
+                    }))}
+                    maxLength={4}
+                    placeholder="Vacío: conservar o continuar sin PIN"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white font-mono tracking-wider"
+                  />
+                  <p className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+                    Déjalo vacío para conservar el PIN actual. Si no tiene PIN persistente, podrá seguir ingresando con el código enviado a su correo.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300">Región de Procedencia</label>
+                    <select
+                      value={editModal.region}
+                      onChange={(e) => setEditModal((prev) => ({ ...prev, region: e.target.value }))}
+                      className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none cursor-pointer"
+                    >
+                      {[
+                        'Amazonas', 'Áncash', 'Apurímac', 'Arequipa', 'Ayacucho', 'Cajamarca', 'Callao',
+                        'Cusco', 'Huancavelica', 'Huánuco', 'Ica', 'Junín', 'La Libertad', 'Lambayeque',
+                        'Lima', 'Loreto', 'Madre de Dios', 'Moquegua', 'Pasco', 'Piura', 'Puno',
+                        'San Martín', 'Tacna', 'Tumbes', 'Ucayali'
+                      ].map((r) => (
+                        <option key={r} value={r}>{r}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300">Institución Educativa</label>
+                    <input
+                      type="text"
+                      value={editModal.institucionEducativa}
+                      onChange={(e) => setEditModal((prev) => ({ ...prev, institucionEducativa: e.target.value }))}
+                      placeholder="Ej: I.E. 1234 Pedro Paulet"
+                      className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none placeholder-slate-400"
+                    />
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
@@ -1050,7 +1704,7 @@ export const UsuariosView: React.FC = () => {
                 <div className="space-y-2.5 pt-2 border-t border-slate-100 dark:border-slate-800">
                   <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block">Áreas o especialidades</label>
                   
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <button
                       type="button"
                       onClick={handleAgregarTodasEdicion}
@@ -1067,12 +1721,12 @@ export const UsuariosView: React.FC = () => {
                     </button>
                   </div>
 
-                  <div className="flex items-center space-x-2 pt-1">
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-1">
                     <select
                       value={editModal.selectedAreaInput}
                       disabled={editModal.modalidad === 'EBE' || areasDisponiblesEdicion.length === 0}
                       onChange={(e) => setEditModal((prev) => ({ ...prev, selectedAreaInput: e.target.value }))}
-                      className="flex-1 px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none cursor-pointer disabled:bg-slate-100 disabled:text-slate-400"
+                      className="w-full sm:flex-1 px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none cursor-pointer disabled:bg-slate-100 disabled:text-slate-400 min-w-0"
                     >
                       {editModal.modalidad === 'EBE' || areasDisponiblesEdicion.length === 0 ? (
                         <option value="—">—</option>
@@ -1086,7 +1740,7 @@ export const UsuariosView: React.FC = () => {
                     <button
                       type="button"
                       onClick={handleAgregarIndividualEdicion}
-                      className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs transition-colors shrink-0 shadow-2xs cursor-pointer flex items-center space-x-1"
+                      className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs transition-colors shrink-0 shadow-2xs cursor-pointer flex items-center justify-center space-x-1"
                     >
                       <span>✓ AGREGAR</span>
                     </button>
@@ -1131,7 +1785,7 @@ export const UsuariosView: React.FC = () => {
                     <span>Información de Suscripción</span>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2 text-xs font-bold">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-bold">
                     {[
                       { key: '1_year', label: '1 año desde hoy' },
                       { key: '1_month', label: '1 mes desde hoy' },
@@ -1145,27 +1799,21 @@ export const UsuariosView: React.FC = () => {
                           value={opt.key}
                           checked={editModal.duracionOption === opt.key}
                           onChange={() => {
-                            const option = opt.key as any;
-                            const startDate = editModal.fechaInicio;
-                            let endDate = startDate;
-                            if (option !== 'custom') {
-                              const d = new Date(startDate + 'T00:00:00');
-                              if (!isNaN(d.getTime())) {
-                                if (option === '1_year') d.setFullYear(d.getFullYear() + 1);
-                                else if (option === '1_month') d.setMonth(d.getMonth() + 1);
-                                else if (option === '6_months') d.setMonth(d.getMonth() + 6);
-                                endDate = d.toISOString().split('T')[0];
-                              }
-                            }
+                            const option = opt.key as '1_year' | '1_month' | '6_months' | 'custom';
                             setEditModal((prev) => ({
                               ...prev,
                               duracionOption: option,
-                              fechaFin: endDate,
+                              ...(option === 'custom'
+                                ? {}
+                                : {
+                                    fechaInicio: getLocalTodayInputDate(),
+                                    fechaFin: calcEndDateExact(getLocalTodayInputDate(), option),
+                                  }),
                             }));
                           }}
-                          className="w-4 h-4 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                          className="w-4 h-4 text-indigo-600 focus:ring-indigo-500 cursor-pointer shrink-0"
                         />
-                        <span className="text-slate-700 dark:text-slate-200">{opt.label}</span>
+                        <span className="text-slate-700 dark:text-slate-200 text-xs">{opt.label}</span>
                       </label>
                     ))}
                   </div>
@@ -1176,25 +1824,16 @@ export const UsuariosView: React.FC = () => {
                       <input
                         type="date"
                         value={editModal.fechaInicio}
+                        disabled={editModal.duracionOption !== 'custom'}
                         onChange={(e) => {
                           const val = e.target.value;
-                          let endDate = editModal.fechaFin;
-                          if (editModal.duracionOption !== 'custom') {
-                            const d = new Date(val + 'T00:00:00');
-                            if (!isNaN(d.getTime())) {
-                              if (editModal.duracionOption === '1_year') d.setFullYear(d.getFullYear() + 1);
-                              else if (editModal.duracionOption === '1_month') d.setMonth(d.getMonth() + 1);
-                              else if (editModal.duracionOption === '6_months') d.setMonth(d.getMonth() + 6);
-                              endDate = d.toISOString().split('T')[0];
-                            }
-                          }
                           setEditModal((prev) => ({
                             ...prev,
                             fechaInicio: val,
-                            fechaFin: endDate,
+                            fechaFin: prev.fechaFin < val ? val : prev.fechaFin,
                           }));
                         }}
-                        className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-200 outline-none"
+                        className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-200 outline-none disabled:bg-slate-100 dark:disabled:bg-slate-800 disabled:text-slate-400 cursor-pointer"
                       />
                     </div>
 
@@ -1203,9 +1842,14 @@ export const UsuariosView: React.FC = () => {
                       <input
                         type="date"
                         value={editModal.fechaFin}
+                        min={editModal.fechaInicio}
                         disabled={editModal.duracionOption !== 'custom'}
-                        onChange={(e) => setEditModal((prev) => ({ ...prev, fechaFin: e.target.value }))}
-                        className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-200 outline-none disabled:bg-slate-100 dark:disabled:bg-slate-800 disabled:text-slate-400"
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          const finalVal = val < editModal.fechaInicio ? editModal.fechaInicio : val;
+                          setEditModal((prev) => ({ ...prev, fechaFin: finalVal }));
+                        }}
+                        className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-200 outline-none disabled:bg-slate-100 dark:disabled:bg-slate-800 disabled:text-slate-400 cursor-pointer"
                       />
                     </div>
                   </div>
@@ -1251,7 +1895,7 @@ export const UsuariosView: React.FC = () => {
                 <div className="flex justify-end space-x-2 pt-3 border-t border-slate-100 dark:border-slate-800">
                   <button
                     type="button"
-                    onClick={() => setEditModal({ isOpen: false, user: null, nombre: '', email: '', modalidad: 'EBR', nivel: 'INICIAL', selectedAreaInput: 'Educación Inicial', areas: [], duracionOption: '6_months', fechaInicio: new Date().toISOString().split('T')[0], fechaFin: new Date().toISOString().split('T')[0], tiposAcceso: { Ascenso: true, Nombramiento: true, Directivo: true } })}
+                    onClick={() => setEditModal({ isOpen: false, user: null, nombre: '', email: '', telefono: '', pin: '', region: 'Lima', institucionEducativa: '', modalidad: 'EBR', nivel: 'INICIAL', selectedAreaInput: 'General', areas: [], duracionOption: '1_year', fechaInicio: new Date().toISOString().split('T')[0], fechaFin: new Date().toISOString().split('T')[0], tiposAcceso: { Ascenso: false, Nombramiento: false, Directivo: false } })}
                     className="px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50"
                   >
                     Cancelar
@@ -1300,6 +1944,41 @@ export const UsuariosView: React.FC = () => {
                 <p className="text-slate-500 font-medium">{detailModal.user.email}</p>
               </div>
 
+              {/* Información de Contacto / Número de Celular */}
+              {(() => {
+                const modalPhone =
+                  detailModal.user.telefono && detailModal.user.telefono.replace(/[^0-9]/g, '').length >= 6
+                    ? detailModal.user.telefono
+                    : detailModal.user.dni && !detailModal.user.dni.startsWith('USR-') && detailModal.user.dni.replace(/[^0-9]/g, '').length >= 6
+                    ? detailModal.user.dni
+                    : '';
+
+                return (
+                  <div className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-2xl flex items-center justify-between">
+                    <div>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase block">Número de Celular / WhatsApp</span>
+                      <div className="flex items-center space-x-1.5 pt-0.5">
+                        <span>📱</span>
+                        <span className="font-mono font-black text-slate-900 dark:text-white text-xs">
+                          {modalPhone || 'Sin número registrado'}
+                        </span>
+                      </div>
+                    </div>
+                    {modalPhone && (
+                      <a
+                        href={getUserWhatsAppLink(modalPhone, detailModal.user.nombre, detailModal.user.email, detailModal.user.pin)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-3 py-1.5 rounded-xl bg-[#00a651] hover:bg-[#008f45] text-white text-[10px] font-black flex items-center space-x-1 shadow-sm transition-all cursor-pointer active:scale-95"
+                      >
+                        <span>💬</span>
+                        <span>WhatsApp</span>
+                      </a>
+                    )}
+                  </div>
+                );
+              })()}
+
               <div className="grid grid-cols-3 gap-2.5">
                 <div className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-2xl">
                   <span className="text-[10px] font-bold text-slate-400 uppercase block">Plan Asignado</span>
@@ -1319,6 +1998,23 @@ export const UsuariosView: React.FC = () => {
                   <span className="text-[10px] font-bold text-slate-400 uppercase block">Estado</span>
                   <span className={`font-black uppercase text-[11px] block truncate ${detailModal.user.estado === 'PREMIUM' ? 'text-emerald-600' : 'text-rose-600'}`}>
                     ● {detailModal.user.estado === 'PREMIUM' ? 'Activo' : 'Pausado'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Información de Ubicación / Procedencia */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-2xl">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase block">Región de Procedencia</span>
+                  <span className="font-extrabold text-slate-800 dark:text-slate-200 text-xs block truncate">
+                    📍 {detailModal.user.region || 'Lima'}
+                  </span>
+                </div>
+
+                <div className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-2xl">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase block">Institución Educativa</span>
+                  <span className="font-extrabold text-slate-800 dark:text-slate-200 text-xs block truncate">
+                    🏫 {detailModal.user.institucionEducativa || 'Sin IE'}
                   </span>
                 </div>
               </div>
@@ -1369,7 +2065,7 @@ export const UsuariosView: React.FC = () => {
                 <div className="flex justify-between items-center text-[11px]">
                   <span className="text-indigo-600 font-extrabold">Último Agente Editor:</span>
                   <span className="font-extrabold text-indigo-700 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950 px-2.5 py-0.5 rounded-full">
-                    {detailModal.user.modificadoPor || 'Juan Avend'}
+                    {detailModal.user.modificadoPor || detailModal.user.creadoPor || 'Administrador'}
                   </span>
                 </div>
               </div>
@@ -1516,6 +2212,17 @@ export const UsuariosView: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Modal de Importación Masiva de Usuarios (Docentes) */}
+      <BulkUserImportModal
+        isOpen={isBulkImportOpen}
+        onClose={() => setIsBulkImportOpen(false)}
+        onSuccess={() => {
+          loadUsers();
+          showToast('✅ Importación masiva de docentes procesada exitosamente.');
+        }}
+        adminName={adminUser.name}
+      />
     </div>
   );
 };

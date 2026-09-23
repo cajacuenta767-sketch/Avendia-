@@ -1,15 +1,23 @@
 // src/app/cuadernillos/page.tsx
 'use client';
 
-import React, { useState, useEffect, useCallback, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef, Suspense } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { ProcessSelector } from '@/components/cuadernillos/ProcessSelector';
 import { CascadingFilters } from '@/components/cuadernillos/CascadingFilters';
 import { EvaluationCard } from '@/components/cuadernillos/EvaluationCard';
 import { PdfViewerModal } from '@/components/cuadernillos/PdfViewerModal';
+import { DocenteFooterNotice } from '@/components/cuadernillos/DocenteFooterNotice';
+import { TrialCountdownHeader } from '@/components/cuadernillos/TrialCountdownHeader';
 import { DocenteAuthModal } from '@/components/auth/DocenteAuthModal';
-import { getEvaluacionesAction, getResourceSignedUrlAction } from '@/services/evaluacionesService';
+import { ResourceNoticeModal, NoticeType } from '@/components/cuadernillos/ResourceNoticeModal';
+import { RestrictedAccessModal } from '@/components/cuadernillos/RestrictedAccessModal';
+import { checkDocenteSpecialtyAccess } from '@/utils/badgeUtils';
+import { getEvaluacionesAction, getResourceSignedUrlAction, getAniosAction } from '@/services/evaluacionesService';
+import { registrarReporteRecursoFaltanteAction } from '@/services/notificacionesService';
 import { getFreshDocenteSessionAction } from '@/services/usuariosService';
+import type { AccountAccessState } from '@/lib/whatsapp';
+import { getAreasDisponibles } from '@/data/cascadingData';
 import {
   Evaluacion,
   EvaluacionesFilterParams,
@@ -94,6 +102,32 @@ const PROCESS_THEMES: Record<ProcesoMinedu, ProcessThemeConfig> = {
   },
 };
 
+const getAccountStateFromSession = (session: Record<string, unknown> | null): AccountAccessState => {
+  const explicitState = typeof session?.estado === 'string' ? session.estado.toUpperCase() : '';
+  if (['ACTIVA', 'EN_ESPERA', 'PAUSADA', 'VENCIDA', 'PRUEBA_FINALIZADA'].includes(explicitState)) {
+    return explicitState as AccountAccessState;
+  }
+
+  const role = typeof session?.rol === 'string' ? session.rol.toUpperCase() : '';
+  const fechaFin = typeof session?.fechaFin === 'string' ? new Date(session.fechaFin) : null;
+  const isExpired = Boolean(fechaFin && !Number.isNaN(fechaFin.getTime()) && fechaFin <= new Date());
+  const isTrial = role.includes('PRUEBA') || role.includes('24H') || role.includes('TRIAL');
+
+  if (role === 'CLIENTE') return 'EN_ESPERA';
+  if (isTrial && isExpired) return 'PRUEBA_FINALIZADA';
+  if (session?.accesoGranted === false) return 'PAUSADA';
+  if (isExpired) return 'VENCIDA';
+  return 'ACTIVA';
+};
+
+const getNoticeTypeForAccountState = (state: AccountAccessState): NoticeType | null => {
+  if (state === 'EN_ESPERA') return 'CUENTA_EN_ESPERA';
+  if (state === 'PAUSADA') return 'CUENTA_PAUSADA';
+  if (state === 'VENCIDA') return 'SUSCRIPCION_VENCIDA';
+  if (state === 'PRUEBA_FINALIZADA') return 'PRUEBA_FINALIZADA';
+  return null;
+};
+
 function CuadernillosContent() {
   const router = useRouter();
   const pathname = usePathname();
@@ -105,37 +139,143 @@ function CuadernillosContent() {
   const initialNivel = (searchParams.get('nivel') as NivelEducativo) || '';
   const initialEspecialidad = searchParams.get('especialidad') || '';
   const initialAnioParam = searchParams.get('anio');
-  const initialAnio = initialAnioParam && initialAnioParam !== 'TODOS' ? Number(initialAnioParam) : '';
+  const initialAnio = initialAnioParam && /^\d{4}$/.test(initialAnioParam)
+    ? Number(initialAnioParam)
+    : (initialProceso === 'ACCESO_CARGOS_DIRECTIVOS' ? 'TODOS' : '');
 
   const [filters, setFilters] = useState<EvaluacionesFilterParams>({
     proceso: initialProceso,
     modalidad: initialModalidad,
     nivel: initialNivel,
     especialidad: initialEspecialidad,
-    anio: initialAnio as any,
+    anio: initialAnio,
     searchQuery: '',
   });
 
   const [nombramientoCategoryTab, setNombramientoCategoryTab] = useState<'TODOS' | 'HABILIDADES_GENERALES' | 'CONOCIMIENTOS_CURRICULARES'>('TODOS');
 
+  const isDirectivos = (filters.proceso || 'NOMBRAMIENTO_DOCENTE') === 'ACCESO_CARGOS_DIRECTIVOS';
+
+  // Filtrado Estricto por Niveles Obligatorios:
+  // Los exámenes aparecen ÚNICAMENTE cuando el usuario completa la selección hasta el último nivel requerido.
+  const { isSelectionComplete, guideMessage } = useMemo(() => {
+    const isDirectivos = (filters.proceso || 'NOMBRAMIENTO_DOCENTE') === 'ACCESO_CARGOS_DIRECTIVOS';
+
+    if (isDirectivos) {
+      return { isSelectionComplete: true, guideMessage: '' };
+    }
+
+    // Nombramiento / Ascenso
+    const modalidad = filters.modalidad ? String(filters.modalidad).trim() : '';
+    if (!modalidad || modalidad === 'TODOS') {
+      return {
+        isSelectionComplete: false,
+        guideMessage: 'Selecciona tu modalidad educativa para consultar los cuadernillos disponibles.',
+      };
+    }
+
+    // Modalidad EBE no requiere nivel ni especialidad
+    if (modalidad === 'EBE') {
+      return { isSelectionComplete: true, guideMessage: '' };
+    }
+
+    const nivel = filters.nivel ? String(filters.nivel).trim() : '';
+    if (!nivel || nivel === 'TODOS') {
+      return {
+        isSelectionComplete: false,
+        guideMessage: 'Selecciona tu nivel educativo para consultar los cuadernillos disponibles.',
+      };
+    }
+
+    // Verificar si (Modalidad, Nivel) exige seleccionar una Especialidad o Área obligatoria
+    const areasDisponibles = getAreasDisponibles(modalidad, nivel);
+    const requiresEspecialidad = areasDisponibles.length > 0;
+
+    if (requiresEspecialidad) {
+      const especialidad = filters.especialidad ? String(filters.especialidad).trim() : '';
+      if (!especialidad || especialidad === 'TODOS') {
+        return {
+          isSelectionComplete: false,
+          guideMessage: 'Selecciona tu especialidad o área para desplegar los cuadernillos disponibles.',
+        };
+      }
+    }
+
+    return { isSelectionComplete: true, guideMessage: '' };
+  }, [filters.proceso, filters.modalidad, filters.nivel, filters.especialidad, filters.anio]);
+
+  const showSubpruebasHeaderSelector = useMemo(() => {
+    return (filters.proceso || 'NOMBRAMIENTO_DOCENTE') === 'NOMBRAMIENTO_DOCENTE';
+  }, [filters.proceso]);
+
   const [evaluaciones, setEvaluaciones] = useState<Evaluacion[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const evaluacionesRequestIdRef = useRef(0);
+  const aniosRequestIdRef = useRef(0);
+  const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null);
   const [hasDocenteSession, setHasDocenteSession] = useState<boolean>(false);
+  const [docenteEmail, setDocenteEmail] = useState<string>('');
+  const [noticeModal, setNoticeModal] = useState<{
+    isOpen: boolean;
+    noticeType: NoticeType | null;
+  }>({
+    isOpen: false,
+    noticeType: null,
+  });
 
   useEffect(() => {
     const checkSession = () => {
-      const sessionStr = localStorage.getItem('docente_session');
-      if (!sessionStr) {
-        router.replace('/');
+      const docenteSessionStr = localStorage.getItem('docente_session');
+      const adminSessionStr = localStorage.getItem('admin_auth_session') || sessionStorage.getItem('admin_auth_session');
+
+      if (!docenteSessionStr && !adminSessionStr) {
+        setIsAuthorized(false);
         setHasDocenteSession(false);
+        setDocenteEmail('');
+        router.replace('/');
       } else {
+        setIsAuthorized(true);
         setHasDocenteSession(true);
+
+        // Sincronización silenciosa en tiempo real con la base de datos
+        if (docenteSessionStr) {
+          try {
+            const parsed = JSON.parse(docenteSessionStr);
+            const parsedEmail = typeof parsed?.email === 'string' ? parsed.email.trim() : '';
+            setDocenteEmail(parsedEmail.includes('@') ? parsedEmail : '');
+            if (parsed?.email && parsed.id !== 'admin-preview-session') {
+              getFreshDocenteSessionAction(parsed.email).then((res) => {
+                if (res.success && res.data) {
+                  const updated = { ...parsed, ...res.data };
+                  localStorage.setItem('docente_session', JSON.stringify(updated));
+                  const accountNoticeType = getNoticeTypeForAccountState(
+                    getAccountStateFromSession(updated as Record<string, unknown>)
+                  );
+                  if (accountNoticeType) {
+                    setNoticeModal({ isOpen: true, noticeType: accountNoticeType });
+                  }
+                }
+              }).catch(() => {});
+            }
+          } catch {
+            setDocenteEmail('');
+          }
+        } else {
+          setDocenteEmail('');
+        }
       }
     };
     checkSession();
     window.addEventListener('docente_session_change', checkSession);
-    return () => window.removeEventListener('docente_session_change', checkSession);
+    window.addEventListener('admin_session_change', checkSession);
+    return () => {
+      window.removeEventListener('docente_session_change', checkSession);
+      window.removeEventListener('admin_session_change', checkSession);
+    };
   }, [router]);
+
+  // Carga dinámica de años desde la Base de Datos según el contexto de filtros seleccionados
+  const [availableAnios, setAvailableAnios] = useState<string[]>([]);
 
   // Modal de Auth
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
@@ -155,6 +295,51 @@ function CuadernillosContent() {
     resourceType: null,
   });
 
+  // Modal de Acceso Restringido por Especialidad
+  const [restrictedModal, setRestrictedModal] = useState<{
+    isOpen: boolean;
+    evaluationLabel: string;
+    docenteAreas: string[];
+    docenteNombre?: string;
+    docenteEmail?: string;
+    accountState?: AccountAccessState;
+    reason: 'PROFILE_MISMATCH' | 'SUBSCRIPTION_INACTIVE';
+  }>({
+    isOpen: false,
+    evaluationLabel: '',
+    docenteAreas: [],
+    docenteNombre: '',
+    docenteEmail: '',
+    accountState: 'ACTIVA',
+    reason: 'PROFILE_MISMATCH',
+  });
+
+  const showRestrictedResolution = (
+    evaluacion: Evaluacion,
+    docenteSession: Record<string, unknown> | null,
+    reason: 'PROFILE_MISMATCH' | 'SUBSCRIPTION_INACTIVE' = 'PROFILE_MISMATCH'
+  ) => {
+    const accessCheck = checkDocenteSpecialtyAccess(docenteSession, evaluacion, false);
+    const rawArea = evaluacion.especialidad || (evaluacion as Evaluacion & { area?: string }).area || '';
+    const fallbackEvaluationLabel = [evaluacion.modalidad, evaluacion.nivel, rawArea]
+      .map((value) => String(value || '').trim())
+      .filter((value) => value && !value.toLowerCase().includes('no aplica'))
+      .join(' - ');
+    setRestrictedModal({
+      isOpen: true,
+      evaluationLabel: accessCheck.evaluationLabel || fallbackEvaluationLabel || 'Resolución seleccionada',
+      docenteAreas: accessCheck.docenteAreas,
+      docenteNombre: typeof docenteSession?.nombre === 'string'
+        ? docenteSession.nombre
+        : typeof docenteSession?.name === 'string'
+          ? docenteSession.name
+          : 'Docente',
+      docenteEmail: typeof docenteSession?.email === 'string' ? docenteSession.email : '',
+      accountState: getAccountStateFromSession(docenteSession),
+      reason,
+    });
+  };
+
   // Sincronización bidireccional con la URL
   const updateUrlParams = useCallback((newFilters: EvaluacionesFilterParams) => {
     const params = new URLSearchParams();
@@ -169,52 +354,118 @@ function CuadernillosContent() {
     router.replace(targetUrl, { scroll: false });
   }, [pathname, router]);
 
+  useEffect(() => {
+    const requestId = ++aniosRequestIdRef.current;
+    const filterSnapshot: EvaluacionesFilterParams = {
+      ...filters,
+      anio: '',
+      searchQuery: '',
+    };
+
+    setAvailableAnios([]);
+
+    const loadAnios = async () => {
+      const res = await getAniosAction(filterSnapshot);
+      if (requestId !== aniosRequestIdRef.current) return;
+
+      if (!res.success) {
+        setAvailableAnios([]);
+        return;
+      }
+
+      const nextAnios = res.data || [];
+      setAvailableAnios(nextAnios);
+
+      const selectedAnio = filters.anio;
+      if (
+        selectedAnio &&
+        selectedAnio !== 'TODOS' &&
+        !nextAnios.includes(String(selectedAnio))
+      ) {
+        const updatedFilters: EvaluacionesFilterParams = { ...filters, anio: '' };
+        setFilters(updatedFilters);
+        updateUrlParams(updatedFilters);
+      }
+    };
+
+    void loadAnios();
+  }, [filters.proceso, filters.modalidad, filters.nivel, filters.especialidad, filters.anio, updateUrlParams]);
+
   const fetchEvaluaciones = useCallback(async () => {
-    setIsLoading(true);
-    const response = await getEvaluacionesAction(filters);
-    if (response.success) {
-      setEvaluaciones(response.data);
-    } else {
+    const requestId = ++evaluacionesRequestIdRef.current;
+
+    if (!isSelectionComplete) {
       setEvaluaciones([]);
+      setIsLoading(false);
+      return;
     }
-    setIsLoading(false);
-  }, [filters]);
+
+    setIsLoading(true);
+    setEvaluaciones([]);
+
+    try {
+      const response = await getEvaluacionesAction(filters);
+      if (requestId !== evaluacionesRequestIdRef.current) return;
+
+      if (response.success) {
+        const sortedData = [...response.data].sort((a, b) => {
+          const anioA = Number(a.anio) || 0;
+          const anioB = Number(b.anio) || 0;
+          if (anioB !== anioA) return anioB - anioA;
+          return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+        });
+        setEvaluaciones(sortedData);
+      } else {
+        setEvaluaciones([]);
+      }
+    } finally {
+      if (requestId === evaluacionesRequestIdRef.current) {
+        setIsLoading(false);
+      }
+    }
+  }, [filters, isSelectionComplete]);
 
   useEffect(() => {
     fetchEvaluaciones();
   }, [fetchEvaluaciones]);
 
   const handleSelectProceso = (nuevoProceso: ProcesoMinedu) => {
+    evaluacionesRequestIdRef.current += 1;
+    aniosRequestIdRef.current += 1;
     setIsLoading(true);
     setEvaluaciones([]);
     const updated: EvaluacionesFilterParams = {
       ...filters,
       proceso: nuevoProceso,
-      modalidad: '' as any,
-      nivel: '' as any,
+      modalidad: '',
+      nivel: '',
       especialidad: '',
-      anio: '' as any,
+      anio: nuevoProceso === 'ACCESO_CARGOS_DIRECTIVOS' ? 'TODOS' : '',
     };
     setFilters(updated);
     updateUrlParams(updated);
   };
 
-  const handleFilterChange = (updatedFilters: EvaluacionesFilterParams) => {
+  const handleFilterChange = useCallback((updatedFilters: EvaluacionesFilterParams) => {
+    evaluacionesRequestIdRef.current += 1;
+    aniosRequestIdRef.current += 1;
     setIsLoading(true);
     setEvaluaciones([]);
     setFilters(updatedFilters);
     updateUrlParams(updatedFilters);
-  };
+  }, [updateUrlParams]);
 
   const handleResetFilters = () => {
+    evaluacionesRequestIdRef.current += 1;
+    aniosRequestIdRef.current += 1;
     setIsLoading(true);
     setEvaluaciones([]);
     const reset: EvaluacionesFilterParams = {
       proceso: filters.proceso,
-      modalidad: '' as any,
-      nivel: '' as any,
+      modalidad: '',
+      nivel: '',
       especialidad: '',
-      anio: '' as any,
+      anio: filters.proceso === 'ACCESO_CARGOS_DIRECTIVOS' ? 'TODOS' : '',
       searchQuery: '',
     };
     setFilters(reset);
@@ -226,113 +477,234 @@ function CuadernillosContent() {
     resourceType: 'CUADERNILLO' | 'RESOLUCION' | 'CLAVES'
   ) => {
     const evalTarget = evaluaciones.find((item) => item.id === evaluationId) || null;
-    await getResourceSignedUrlAction(evaluationId, resourceType);
+    if (!evalTarget) return;
 
-    setActiveModal({
-      isOpen: true,
-      evaluacion: evalTarget,
-      resourceType: resourceType,
-    });
+    // El servidor autoriza primero el recurso. Así un solucionario AVEND no
+    // puede abrirse usando una ruta que la interfaz ya conocía.
+    try {
+      const signedRes = await getResourceSignedUrlAction(evaluationId, resourceType);
+      if (!signedRes.success) {
+        if (signedRes.error.code === 'SPECIALTY_FORBIDDEN') {
+          const sessionStr = localStorage.getItem('docente_session');
+          let session: Record<string, unknown> | null = null;
+          try {
+            session = sessionStr ? JSON.parse(sessionStr) as Record<string, unknown> : null;
+          } catch {
+            session = null;
+          }
+          showRestrictedResolution(evalTarget, session);
+        } else if (signedRes.error.code === 'SUBSCRIPTION_REQUIRED') {
+          const sessionStr = localStorage.getItem('docente_session');
+          let session: Record<string, unknown> | null = null;
+          try {
+            session = sessionStr ? JSON.parse(sessionStr) as Record<string, unknown> : null;
+          } catch {
+            session = null;
+          }
+          const accountNoticeType = getNoticeTypeForAccountState(getAccountStateFromSession(session));
+          setNoticeModal({ isOpen: true, noticeType: accountNoticeType || 'CUENTA_EN_ESPERA' });
+        }
+        return;
+      }
+
+      const newSignedUrl = signedRes.data.signedUrl;
+      setActiveModal({
+        isOpen: true,
+        resourceType,
+        evaluacion: {
+          ...evalTarget,
+          resources: {
+            ...evalTarget.resources,
+            cuadernilloKey: resourceType === 'CUADERNILLO' ? newSignedUrl : evalTarget.resources?.cuadernilloKey,
+            resolucionKey: resourceType === 'RESOLUCION' ? newSignedUrl : evalTarget.resources?.resolucionKey,
+            clavesKey: resourceType === 'CLAVES' ? newSignedUrl : evalTarget.resources?.clavesKey,
+          },
+        },
+      });
+    } catch (err) {
+      console.error('Error al autorizar el documento:', err);
+    }
+  };
+
+  const notificarAdminDocumentoFaltante = (
+    evalTarget: Evaluacion,
+    tipoRecurso: 'CUADERNILLO' | 'RESOLUCION' | 'CLAVES'
+  ) => {
+    try {
+      const sessionStr = typeof window !== 'undefined' ? localStorage.getItem('docente_session') : null;
+      const session = sessionStr ? JSON.parse(sessionStr) : null;
+
+      registrarReporteRecursoFaltanteAction({
+        evaluacionId: evalTarget.id,
+        tipoRecurso,
+        tituloEvaluacion: evalTarget.titulo,
+        proceso: evalTarget.proceso,
+        modalidad: evalTarget.modalidad,
+        nivel: evalTarget.nivel,
+        area: evalTarget.especialidad || (evalTarget as any).area,
+        anio: evalTarget.anio,
+        codigo: evalTarget.resources?.codigoCuadernillo || evalTarget.codigoCuadernillo || evalTarget.mineduCode,
+        docenteNombre: session?.nombre || session?.name,
+        docenteEmail: session?.email,
+      }).catch((e) => console.warn('⚠️ No se pudo enviar notificación de recurso faltante:', e));
+    } catch (err) {
+      console.error('Error al preparar reporte de recurso faltante:', err);
+    }
   };
 
   const handleOpenResource = async (
     evaluationId: string,
     resourceType: 'CUADERNILLO' | 'RESOLUCION' | 'CLAVES'
   ) => {
-    const sessionStr = localStorage.getItem('docente_session');
-    const adminSessionStr = localStorage.getItem('admin_auth_session') || sessionStorage.getItem('admin_auth_session');
+    const evalTarget = evaluaciones.find((item) => item.id === evaluationId);
+    if (!evalTarget) return;
 
-    if (!sessionStr && !adminSessionStr) {
-      router.push('/#login-form');
+    // Validación de Sesión, Rol CLIENTE y Expiración
+    const sessionStr = typeof window !== 'undefined' ? localStorage.getItem('docente_session') : null;
+    const adminSessionStr = typeof window !== 'undefined' ? localStorage.getItem('admin_auth_session') || sessionStorage.getItem('admin_auth_session') : null;
+
+    let session: any = null;
+    if (sessionStr) {
+      try {
+        session = JSON.parse(sessionStr);
+
+        // 🔄 SINCRONIZACIÓN EN TIEMPO REAL CON LA BD (Refleja permisos del admin al instante sin cerrar sesión)
+        if (session?.email && session.id !== 'admin-preview-session') {
+          try {
+            const freshRes = await getFreshDocenteSessionAction(session.email);
+            if (freshRes.success && freshRes.data) {
+              session = { ...session, ...freshRes.data };
+              localStorage.setItem('docente_session', JSON.stringify(session));
+            }
+          } catch {}
+        }
+
+        const accountState = getAccountStateFromSession(session as Record<string, unknown>);
+        const accountNoticeType = getNoticeTypeForAccountState(accountState);
+        if (accountNoticeType && !adminSessionStr) {
+          if (resourceType === 'RESOLUCION') {
+            showRestrictedResolution(evalTarget, session, 'SUBSCRIPTION_INACTIVE');
+            return;
+          }
+          setNoticeModal({
+            isOpen: true,
+            noticeType: accountNoticeType,
+          });
+          return;
+        }
+      } catch {}
+    }
+
+    // Los documentos oficiales MINEDU son parte del plan completo. La
+    // especialidad solo restringe los solucionarios elaborados por AVEND.
+    const resolutionOrigin = String(evalTarget.resources?.origenResolucion || 'AVEND').toUpperCase();
+    const isDirectivosResource = evalTarget.proceso === 'ACCESO_CARGOS_DIRECTIVOS';
+    const requiresSpecialtyAccess =
+      resourceType === 'RESOLUCION' && resolutionOrigin !== 'MINEDU' && !isDirectivosResource;
+    if (requiresSpecialtyAccess) {
+      const accessCheck = checkDocenteSpecialtyAccess(session, evalTarget, Boolean(adminSessionStr));
+      if (!accessCheck.hasAccess) {
+        showRestrictedResolution(evalTarget, session);
+        return;
+      }
+    }
+
+    // 1. CUADERNILLOS Y CLAVES MINEDU:
+    // Todos los usuarios podrán ver y descargar todos los cuadernillos y claves MINEDU disponibles en la plataforma.
+    if (resourceType === 'CUADERNILLO') {
+      const cuadernilloKey = evalTarget.resources?.cuadernilloKey;
+      if (!cuadernilloKey || !cuadernilloKey.trim() || cuadernilloKey.includes('ejemplo.pdf')) {
+        setNoticeModal({
+          isOpen: true,
+          noticeType: 'CUADERNILLO_NO_DISPONIBLE',
+        });
+        notificarAdminDocumentoFaltante(evalTarget, 'CUADERNILLO');
+        return;
+      }
+      triggerOpenResource(evaluationId, resourceType);
       return;
     }
 
-    try {
-      let session = sessionStr ? JSON.parse(sessionStr) : null;
-      if (!session && adminSessionStr) {
-        session = {
-          id: 'admin-preview-session',
-          nombre: 'Administrador',
-          email: 'admin@avendescala.pe',
-          nivel: 'NO_APLICA',
-          area: 'TODAS',
-          areas: ['TODAS'],
-        };
+    if (resourceType === 'CLAVES') {
+      const clavesKey = evalTarget.resources?.clavesKey;
+      if (!clavesKey || !clavesKey.trim() || clavesKey.includes('ejemplo.pdf')) {
+        setNoticeModal({
+          isOpen: true,
+          noticeType: 'CLAVES_NO_DISPONIBLES',
+        });
+        notificarAdminDocumentoFaltante(evalTarget, 'CLAVES');
+        return;
+      }
+      triggerOpenResource(evaluationId, resourceType);
+      return;
+    }
+
+    // 2. RESOLUCIONES EN PDF:
+    if (resourceType === 'RESOLUCION') {
+      const resolucionKey = evalTarget.resources?.resolucionKey;
+
+      // CASO A: Cuando un examen NO tiene resolución en PDF subida/disponible:
+      if (!resolucionKey || !resolucionKey.trim() || resolucionKey.includes('ejemplo.pdf')) {
+        setNoticeModal({
+          isOpen: true,
+          noticeType: 'RESOLUCION_PDF_NO_DISPONIBLE',
+        });
+        notificarAdminDocumentoFaltante(evalTarget, 'RESOLUCION');
+        return;
       }
 
-      // Re-consultar a la base de datos en tiempo real para obtener cualquier cambio realizado por el Admin
-      if (session?.email && session.id !== 'admin-preview-session') {
-        const freshRes = await getFreshDocenteSessionAction(session.email);
-        if (freshRes.success) {
-          session = freshRes.data;
-          localStorage.setItem('docente_session', JSON.stringify(session));
-        }
+      // Una resolución oficial MINEDU sigue la misma regla abierta de los
+      // cuadernillos y claves oficiales.
+      if (!requiresSpecialtyAccess) {
+        triggerOpenResource(evaluationId, resourceType);
+        return;
       }
 
-      const evalTarget = evaluaciones.find((item) => item.id === evaluationId);
+      // CASO B: Cuando la resolución en PDF SÍ existe, validar si corresponde al perfil del usuario:
+      const sessionStr = localStorage.getItem('docente_session');
+      const adminSessionStr = localStorage.getItem('admin_auth_session') || sessionStorage.getItem('admin_auth_session');
 
-      if (evalTarget && session) {
-        const normalize = (str: string) =>
-          (str || '')
-            .toLowerCase()
-            .normalize('NFD')
-            .replace(/[\u0300-\u036f]/g, '')
-            .replace(/[^a-z0-9\s]/g, ' ')
-            .trim();
+      if (!sessionStr && !adminSessionStr) {
+        setPendingResource({ evaluationId, resourceType });
+        setIsAuthModalOpen(true);
+        return;
+      }
 
-        const userNivel = normalize(session.nivel);
-        const evalNivel = normalize(evalTarget.nivel);
-
-        // 1. Verificación Nivel: Si el usuario es universal (NO_APLICA, TODOS, etc.), permitir acceso
-        const isNivelUniversal =
-          !userNivel ||
-          userNivel.includes('no aplica') ||
-          userNivel.includes('todos') ||
-          userNivel.includes('todas');
-
-        if (!isNivelUniversal && evalNivel && !evalNivel.includes('no aplica') && !evalNivel.includes(userNivel) && !userNivel.includes(evalNivel)) {
-          alert(`🔒 ACCESO RESTRINGIDO POR NIVEL\n\nTu cuenta docente Premium está asignada únicamente al nivel "${session.nivel}". No tienes permiso para acceder a los materiales del nivel "${evalTarget.nivel}".\n\nSolicita la ampliación de tu plan por WhatsApp.`);
+      try {
+        let session = sessionStr ? JSON.parse(sessionStr) : null;
+        if (!session && adminSessionStr) {
+          // Administrador tiene acceso total
+          triggerOpenResource(evaluationId, resourceType);
           return;
         }
 
-        // 2. Verificación Área / Especialidad Flexible
-        if (session.areas && Array.isArray(session.areas) && session.areas.length > 0) {
-          const userAreas = session.areas.map((a: string) => normalize(a));
-
-          const isUniversalArea = userAreas.some(
-            (ua: string) =>
-              ua.includes('todos') ||
-              ua.includes('todas') ||
-              ua.includes('completo') ||
-              ua.includes('general') ||
-              ua.includes('acceso total') ||
-              ua.includes('ambos')
-          );
-
-          if (!isUniversalArea) {
-            const targetText = normalize(
-              `${evalTarget.titulo} ${evalTarget.especialidadLabel} ${(evalTarget as any).area || ''} ${evalTarget.especialidad || ''}`
-            );
-
-            const hasAccess = userAreas.some((ua: string) => {
-              if (!ua) return false;
-              if (targetText.includes(ua) || ua.includes(targetText)) return true;
-
-              // Comparación por palabras clave de 3 o más letras (ej: "inicial", "aip", "primaria", "matematica")
-              const words = ua.split(/\s+/).filter((w) => w.length >= 3);
-              return words.some((word) => targetText.includes(word));
-            });
-
-            if (!hasAccess) {
-              alert(`🔒 ACCESO RESTRINGIDO POR ESPECIALIDAD\n\nTu suscripción Premium no incluye el área "${evalTarget.especialidad || evalTarget.especialidadLabel}".\n\nEspecialidades habilitadas en tu cuenta: ${session.areas.join(', ')}.`);
-              return;
-            }
+        // Re-consultar a la base de datos en tiempo real
+        if (session?.email && session.id !== 'admin-preview-session') {
+          const freshRes = await getFreshDocenteSessionAction(session.email);
+          if (freshRes.success) {
+            session = freshRes.data;
+            localStorage.setItem('docente_session', JSON.stringify(session));
           }
         }
-      }
-    } catch {}
 
-    triggerOpenResource(evaluationId, resourceType);
+        // Validar Estado de la Cuenta
+        if (getAccountStateFromSession(session as Record<string, unknown>) !== 'ACTIVA') {
+          showRestrictedResolution(evalTarget, session, 'SUBSCRIPTION_INACTIVE');
+          return;
+        }
+
+        // Verificación Autorizada Canónica de Especialidad y Niveles (Soporte Multi-Especialidad)
+        const accessCheck = checkDocenteSpecialtyAccess(session, evalTarget, Boolean(adminSessionStr));
+        if (!accessCheck.hasAccess) {
+          showRestrictedResolution(evalTarget, session);
+          return;
+        }
+      } catch (err) {
+        console.error('Error al validar acceso de resolución:', err);
+      }
+
+      triggerOpenResource(evaluationId, resourceType);
+    }
   };
 
   const handleAuthSuccess = () => {
@@ -358,11 +730,17 @@ function CuadernillosContent() {
 
   const habGeneralesList = React.useMemo(() => {
     return evaluaciones.filter((item) => {
+      const tipoLower = (item.tipoCuadernillo || '').toLowerCase().trim();
       const espLower = (item.especialidad || '').toLowerCase().trim();
       const titleLower = (item.titulo || '').toLowerCase().trim();
+
+      if (tipoLower.includes('conocimiento') || tipoLower.includes('curricular') || tipoLower.includes('pedagog')) {
+        return false;
+      }
+
       return (
+        tipoLower.includes('habilidades generales') ||
         espLower.includes('habilidades generales') ||
-        espLower.includes('general') ||
         espLower.includes('comprension lectora') ||
         espLower.includes('comprensión lectora') ||
         espLower.includes('razonamiento logico') ||
@@ -378,11 +756,17 @@ function CuadernillosContent() {
 
   const curricularesPedagogicosList = React.useMemo(() => {
     return evaluaciones.filter((item) => {
+      const tipoLower = (item.tipoCuadernillo || '').toLowerCase().trim();
       const espLower = (item.especialidad || '').toLowerCase().trim();
       const titleLower = (item.titulo || '').toLowerCase().trim();
+
+      if (tipoLower.includes('conocimiento') || tipoLower.includes('curricular') || tipoLower.includes('pedagog')) {
+        return true;
+      }
+
       const isHg = (
+        tipoLower.includes('habilidades generales') ||
         espLower.includes('habilidades generales') ||
-        espLower.includes('general') ||
         espLower.includes('comprension lectora') ||
         espLower.includes('comprensión lectora') ||
         espLower.includes('razonamiento logico') ||
@@ -397,8 +781,48 @@ function CuadernillosContent() {
     });
   }, [evaluaciones]);
 
+  const currentCategoryData = React.useMemo(() => {
+    if (nombramientoCategoryTab === 'HABILIDADES_GENERALES') {
+      return {
+        badge: '🧠 COMPRENSIÓN LECTORA Y RAZONAMIENTO LÓGICO',
+        title: 'Cuadernillos de Habilidades Generales',
+        subtitle: 'Subpruebas oficiales MINEDU de Comprensión Lectora y Razonamiento Lógico Matemático.',
+        list: habGeneralesList,
+        emptyMsg: 'No hay cuadernillos de Habilidades Generales para la combinación seleccionada.',
+      };
+    }
+    if (nombramientoCategoryTab === 'CONOCIMIENTOS_CURRICULARES') {
+      return {
+        badge: '📘 ESPECIALIDAD Y PEDAGOGÍA',
+        title: 'Cuadernillos de Conocimientos Curriculares y Pedagógicos',
+        subtitle: 'Evaluaciones de conocimientos disciplinares, didácticos y pedagógicos del nivel y área.',
+        list: curricularesPedagogicosList,
+        emptyMsg: 'No hay cuadernillos de Conocimientos Curriculares y Pedagógicos para la combinación seleccionada.',
+      };
+    }
+    // 'TODOS'
+    return {
+      badge: '✨ REPOSITORIO COMPLETO',
+      title: 'Todos los Cuadernillos de Evaluación',
+      subtitle: 'Evaluaciones oficiales completas disponibles para la selección actual.',
+      list: evaluaciones,
+      emptyMsg: 'No hay cuadernillos disponibles para la combinación seleccionada.',
+    };
+  }, [nombramientoCategoryTab, habGeneralesList, curricularesPedagogicosList, evaluaciones]);
+
+  if (isAuthorized !== true) {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex items-center justify-center text-xs font-extrabold text-slate-400">
+        Verificando acceso a la plataforma...
+      </div>
+    );
+  }
+
   return (
     <main className="min-h-screen bg-slate-50 dark:bg-slate-950 transition-colors duration-500 pb-16">
+      {/* Banner de Cuenta Regresiva de 24h (Solo para usuarios con rol de prueba gratis) */}
+      <TrialCountdownHeader />
+
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
         
         {/* Banner de Autenticación de Docente (Si no ha iniciado sesión) */}
@@ -413,7 +837,7 @@ function CuadernillosContent() {
                   ACCESO RESTRINGIDO A DOCENTES REGISTRADOS
                 </span>
                 <p className="text-xs">
-                  Ingresa con tu DNI o Correo autorizado para consultar y descargar todo el material oficial MINEDU.
+                  Ingresa tu correo autorizado para recibir tu código de acceso y consultar o descargar todo el material oficial MINEDU.
                 </p>
               </div>
             </div>
@@ -429,7 +853,7 @@ function CuadernillosContent() {
 
         {/* Breadcrumb Dinámico */}
         <nav className="flex items-center space-x-1.5 text-xs text-gray-400 dark:text-slate-500">
-          <a href="/" className="hover:text-gray-700 dark:hover:text-slate-300 transition-colors">Inicio</a>
+          <a href="/cuadernillos" className="hover:text-gray-700 dark:hover:text-slate-300 transition-colors">Inicio</a>
           <span>&gt;</span>
           <span className="font-bold text-gray-700 dark:text-slate-300">{currentTheme.breadcrumb}</span>
         </nav>
@@ -497,6 +921,7 @@ function CuadernillosContent() {
           activeProceso={procesoTitleKey}
           activeSubcategoria={nombramientoCategoryTab}
           onSubcategoriaChange={(sub) => setNombramientoCategoryTab(sub)}
+          availableAnios={availableAnios}
         />
 
         {/* Sección de Resultados Organizada por Categorías */}
@@ -513,27 +938,32 @@ function CuadernillosContent() {
             </div>
             
             <span className="text-xs font-semibold text-gray-400">
-              {evaluaciones.length} materiales encontrados
+              {!isSelectionComplete
+                ? 'Esperando selección'
+                : `${evaluaciones.length} ${evaluaciones.length === 1 ? 'material encontrado' : 'materiales encontrados'}`}
             </span>
           </div>
 
-          {!filters.modalidad ? (
-            <div className="text-center py-12 px-4 bg-white dark:bg-slate-900 rounded-3xl border border-gray-200/80 dark:border-slate-800 shadow-2xs space-y-2">
-              <h3 className="text-base font-bold text-gray-900 dark:text-white">
-                Selecciona tu modalidad, nivel y especialidad
-              </h3>
-              <p className="text-xs text-gray-400 dark:text-slate-500">
-                Usa el formulario superior en secuencia para consultar las evaluaciones del repositorio.
-              </p>
-            </div>
-          ) : isLoading ? (
+          {isLoading ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              {[1, 2].map((n) => (
+              {[1, 2, 3, 4].map((n) => (
                 <div
                   key={n}
                   className="h-56 bg-gray-200/80 dark:bg-slate-800 rounded-3xl animate-pulse"
                 />
               ))}
+            </div>
+          ) : !isSelectionComplete ? (
+            <div className="text-center py-16 px-6 bg-white dark:bg-slate-900 rounded-3xl border border-dashed border-gray-300 dark:border-slate-800 shadow-2xs space-y-3">
+              <div className="w-12 h-12 rounded-2xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 mx-auto flex items-center justify-center text-xl shadow-xs">
+                📋
+              </div>
+              <h3 className="text-base font-extrabold text-gray-900 dark:text-white">
+                {guideMessage}
+              </h3>
+              <p className="text-xs text-gray-500 dark:text-slate-400 max-w-md mx-auto leading-relaxed">
+                Usa los filtros superiores para elegir tu modalidad, nivel educativo y especialidad para desplegar únicamente los exámenes que correspondan a tu perfil.
+              </p>
             </div>
           ) : evaluaciones.length === 0 ? (
             <div className="text-center py-16 px-4 bg-white dark:bg-slate-900 rounded-3xl border border-gray-200/80 dark:border-slate-800 shadow-2xs space-y-2">
@@ -541,7 +971,7 @@ function CuadernillosContent() {
                 No se encontraron cuadernillos para esta combinación
               </h3>
               <p className="text-xs text-gray-400 dark:text-slate-500">
-                Prueba cambiando de nivel, especialidad o limpiando los filtros.
+                Prueba cambiando de modalidad, nivel, especialidad o limpiando los filtros.
               </p>
               <button
                 onClick={handleResetFilters}
@@ -551,92 +981,91 @@ function CuadernillosContent() {
               </button>
             </div>
           ) : isNombramiento ? (
-            /* LÓGICA ESTRUCTURADA Y LIMPIA PARA NOMBRAMIENTO */
-            <div className="space-y-6">
-              {/* CATEGORÍA 1: CUADERNILLOS DE HABILIDADES GENERALES */}
-              {(nombramientoCategoryTab === 'HABILIDADES_GENERALES' || nombramientoCategoryTab === 'TODOS') && habGeneralesList.length > 0 && (
-                <div className="space-y-4 bg-white dark:bg-slate-900 p-5 sm:p-6 rounded-3xl border border-purple-200/90 dark:border-purple-900/40 shadow-xs">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-purple-100 dark:border-purple-900/30 pb-4">
-                    <div className="space-y-1">
-                      <div className="inline-flex items-center space-x-1.5 px-3 py-0.5 rounded-full bg-purple-100 dark:bg-purple-950/80 text-purple-800 dark:text-purple-300 text-[10px] font-black uppercase tracking-wider border border-purple-200 dark:border-purple-800">
-                        <span>🧠 COMPRENSIÓN LECTORA Y RAZONAMIENTO LÓGICO</span>
-                      </div>
-                      <h3 className="text-lg font-black text-slate-900 dark:text-white tracking-tight">
-                        Cuadernillos de Habilidades Generales
-                      </h3>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">
-                        Subpruebas oficiales MINEDU de Comprensión Lectora y Razonamiento Lógico Matemático.
-                      </p>
+            /* LÓGICA ESTRUCTURADA Y UNIFICADA PARA NOMBRAMIENTO */
+            <div className="space-y-4 bg-white dark:bg-slate-900 p-5 sm:p-6 rounded-3xl border border-purple-200/90 dark:border-purple-900/40 shadow-xs">
+              <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4 border-b border-purple-100 dark:border-purple-900/30 pb-4">
+                <div className="flex flex-col space-y-1.5 min-w-0">
+                  <div className="self-start inline-flex items-center space-x-1.5 px-3 py-0.5 rounded-full bg-purple-100 dark:bg-purple-950/80 text-purple-800 dark:text-purple-300 text-[10px] font-black uppercase tracking-wider border border-purple-200 dark:border-purple-800">
+                    <span>{currentCategoryData.badge}</span>
+                  </div>
+                  <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-white tracking-tight leading-snug">
+                    {currentCategoryData.title}
+                  </h3>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2.5 shrink-0 self-start lg:self-auto">
+                  {/* Botones Tipo Pestaña (Pills) para Subpruebas con Opción "Ver Todos / Ver Ambos" */}
+                  {showSubpruebasHeaderSelector && (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setNombramientoCategoryTab('TODOS')}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center space-x-1.5 ${
+                          nombramientoCategoryTab === 'TODOS'
+                            ? 'bg-purple-600 text-white shadow-md shadow-purple-500/20'
+                            : 'bg-white dark:bg-slate-900 border border-purple-200 dark:border-purple-800 text-slate-700 dark:text-slate-300 hover:bg-purple-50 dark:hover:bg-purple-950/40'
+                        }`}
+                      >
+                        <span>✨</span>
+                        <span>Ver Todos</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setNombramientoCategoryTab('HABILIDADES_GENERALES')}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center space-x-1.5 ${
+                          nombramientoCategoryTab === 'HABILIDADES_GENERALES'
+                            ? 'bg-purple-600 text-white shadow-md shadow-purple-500/20'
+                            : 'bg-white dark:bg-slate-900 border border-purple-200 dark:border-purple-800 text-slate-700 dark:text-slate-300 hover:bg-purple-50 dark:hover:bg-purple-950/40'
+                        }`}
+                      >
+                        <span>🧠</span>
+                        <span>Habilidades Generales</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setNombramientoCategoryTab('CONOCIMIENTOS_CURRICULARES')}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center space-x-1.5 ${
+                          (nombramientoCategoryTab as string) === 'CONOCIMIENTOS_CURRICULARES'
+                            ? 'bg-purple-600 text-white shadow-md shadow-purple-500/20'
+                            : 'bg-white dark:bg-slate-900 border border-purple-200 dark:border-purple-800 text-slate-700 dark:text-slate-300 hover:bg-purple-50 dark:hover:bg-purple-950/40'
+                        }`}
+                      >
+                        <span>📚</span>
+                        <span>Conocimientos Curriculares y Pedagógicos</span>
+                      </button>
                     </div>
-                    <span className="px-3 py-1 rounded-xl bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 text-xs font-extrabold shrink-0 self-start sm:self-auto">
-                      {habGeneralesList.length} {habGeneralesList.length === 1 ? 'cuadernillo' : 'cuadernillos'}
-                    </span>
-                  </div>
+                  )}
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-1">
-                    {habGeneralesList.map((evaluacion) => (
-                      <EvaluationCard
-                        key={evaluacion.id}
-                        evaluacion={evaluacion}
-                        onOpenResource={handleOpenResource}
-                      />
-                    ))}
-                  </div>
+                  <span className="shrink-0 px-3 py-1.5 rounded-xl bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 text-xs font-extrabold">
+                    {currentCategoryData.list.length} {currentCategoryData.list.length === 1 ? 'cuadernillo' : 'cuadernillos'}
+                  </span>
                 </div>
-              )}
+              </div>
 
-              {/* CATEGORÍA 2: CUADERNILLOS DE CONOCIMIENTO CURRICULARES Y PEDAGÓGICOS */}
-              {(nombramientoCategoryTab === 'CONOCIMIENTOS_CURRICULARES' || nombramientoCategoryTab === 'TODOS') && curricularesPedagogicosList.length > 0 && (
-                <div className="space-y-4 bg-white dark:bg-slate-900 p-5 sm:p-6 rounded-3xl border border-blue-200/90 dark:border-blue-900/40 shadow-xs">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-blue-100 dark:border-blue-900/30 pb-4">
-                    <div className="space-y-1">
-                      <div className="inline-flex items-center space-x-1.5 px-3 py-0.5 rounded-full bg-blue-100 dark:bg-blue-950/80 text-blue-800 dark:text-blue-300 text-[10px] font-black uppercase tracking-wider border border-blue-200 dark:border-blue-800">
-                        <span>📘 ESPECIALIDAD Y PEDAGOGÍA</span>
-                      </div>
-                      <h3 className="text-lg font-black text-slate-900 dark:text-white tracking-tight">
-                        Cuadernillos de Conocimientos Curriculares y Pedagógicos
-                      </h3>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">
-                        Evaluaciones de conocimientos disciplinares, didácticos y pedagógicos del nivel y área.
-                      </p>
-                    </div>
-                    <span className="px-3 py-1 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 text-xs font-extrabold shrink-0 self-start sm:self-auto">
-                      {curricularesPedagogicosList.length} {curricularesPedagogicosList.length === 1 ? 'cuadernillo' : 'cuadernillos'}
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-1">
-                    {curricularesPedagogicosList.map((evaluacion) => (
-                      <EvaluationCard
-                        key={evaluacion.id}
-                        evaluacion={evaluacion}
-                        onOpenResource={handleOpenResource}
-                      />
-                    ))}
-                  </div>
+              {currentCategoryData.list.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-1">
+                  {currentCategoryData.list.map((evaluacion) => (
+                    <EvaluationCard
+                      key={evaluacion.id}
+                      evaluacion={evaluacion}
+                      onOpenResource={handleOpenResource}
+                    />
+                  ))}
                 </div>
-              )}
-
-              {/* Si no hay coincidencia para la subcategoría activa */}
-              {nombramientoCategoryTab === 'HABILIDADES_GENERALES' && habGeneralesList.length === 0 && (
-                <div className="text-center py-10 px-4 bg-purple-50/40 dark:bg-purple-950/20 rounded-3xl border border-dashed border-purple-200 dark:border-purple-900/40 text-slate-500 dark:text-slate-400 space-y-1">
+              ) : (
+                <div className="text-center py-10 px-4 bg-purple-50/40 dark:bg-purple-950/20 rounded-2xl border border-dashed border-purple-200 dark:border-purple-900/40 text-slate-500 dark:text-slate-400 space-y-2">
                   <p className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                    No hay cuadernillos de Habilidades Generales para la combinación seleccionada.
+                    {currentCategoryData.emptyMsg}
                   </p>
-                  <p className="text-[11px]">
-                    Cambia a Conocimientos Curriculares para explorar los materiales disponibles.
-                  </p>
-                </div>
-              )}
-
-              {nombramientoCategoryTab === 'CONOCIMIENTOS_CURRICULARES' && curricularesPedagogicosList.length === 0 && (
-                <div className="text-center py-10 px-4 bg-blue-50/40 dark:bg-blue-950/20 rounded-3xl border border-dashed border-blue-200 dark:border-blue-900/40 text-slate-500 dark:text-slate-400 space-y-1">
-                  <p className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                    No hay cuadernillos de Conocimientos Curriculares para la combinación seleccionada.
-                  </p>
-                  <p className="text-[11px]">
-                    Cambia a Habilidades Generales para explorar los materiales disponibles.
-                  </p>
+                  {nombramientoCategoryTab !== 'TODOS' && (
+                    <button
+                      type="button"
+                      onClick={() => setNombramientoCategoryTab('TODOS')}
+                      className="text-xs font-black text-purple-600 dark:text-purple-400 hover:underline cursor-pointer inline-flex items-center space-x-1"
+                    >
+                      <span>Ver Todos los Cuadernillos &rarr;</span>
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -653,6 +1082,9 @@ function CuadernillosContent() {
             </div>
           )}
         </div>
+
+        {/* Nota Aclaratoria Oficial para Docentes Logueados (Visualización Única) */}
+        <DocenteFooterNotice />
       </div>
 
       <DocenteAuthModal
@@ -666,6 +1098,24 @@ function CuadernillosContent() {
         onClose={handleCloseModal}
         evaluacion={activeModal.evaluacion}
         resourceType={activeModal.resourceType}
+      />
+
+      <ResourceNoticeModal
+        isOpen={noticeModal.isOpen}
+        onClose={() => setNoticeModal({ isOpen: false, noticeType: null })}
+        noticeType={noticeModal.noticeType}
+        docenteEmail={docenteEmail}
+      />
+
+      <RestrictedAccessModal
+        isOpen={restrictedModal.isOpen}
+        onClose={() => setRestrictedModal({ isOpen: false, evaluationLabel: '', docenteAreas: [], accountState: 'ACTIVA', reason: 'PROFILE_MISMATCH' })}
+        evaluationLabel={restrictedModal.evaluationLabel}
+        docenteAreas={restrictedModal.docenteAreas}
+        docenteNombre={restrictedModal.docenteNombre}
+        docenteEmail={restrictedModal.docenteEmail}
+        accountState={restrictedModal.accountState}
+        reason={restrictedModal.reason}
       />
     </main>
   );

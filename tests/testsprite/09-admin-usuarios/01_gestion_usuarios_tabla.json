@@ -1,0 +1,16 @@
+{
+  "$schema": "https://raw.githubusercontent.com/TestSprite/testsprite-cli/v0.7.0/schemas/plan.schema.json",
+  "projectId": "c83c6336-38d5-42ed-a742-0c24077b6964",
+  "type": "frontend",
+  "name": "23 - Admin Usuarios: Tabla de Gestión y Búsqueda de Docentes",
+  "planSteps": [
+    {
+      "type": "action",
+      "description": "Navegar a la pestaña 'Usuarios' en https://cuadernillos.avend.pe/admin."
+    },
+    {
+      "type": "assertion",
+      "description": "Verificar que cargue la lista completa de docentes con su nombre, correo, rol, modalidad, especialidad, fecha de inicio y fecha de vencimiento con buscador en tiempo real."
+    }
+  ]
+}

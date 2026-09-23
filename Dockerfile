@@ -1,9 +1,9 @@
 # Dockerfile para AVEND ESCALA (Next.js 14 Standalone + Prisma)
 FROM node:20-alpine AS base
+RUN apk add --no-cache libc6-compat openssl
 
 # 1. Instalar dependencias
 FROM base AS deps
-RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
 COPY package.json package-lock.json ./
@@ -35,7 +35,9 @@ COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/node_modules ./node_modules
 
 # Permisos para persistencia de archivos subidos
-RUN mkdir -p ./public/uploads && chown -R nextjs:nodejs ./public/uploads
+RUN mkdir -p ./public/uploads/cuadernillos ./public/uploads/recursos && \
+    chmod -R 755 ./public/uploads && \
+    chown -R nextjs:nodejs ./public/uploads
 
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static

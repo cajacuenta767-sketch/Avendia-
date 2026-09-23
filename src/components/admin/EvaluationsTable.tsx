@@ -3,6 +3,7 @@
 
 import React from 'react';
 import { Evaluacion } from '@/types/evaluacion';
+import { formatEvaluationTitle } from '@/lib/evaluationPresentation';
 
 interface EvaluationsTableProps {
   evaluaciones: Evaluacion[];
@@ -40,7 +41,7 @@ export const EvaluationsTable: React.FC<EvaluationsTableProps> = ({
                 {/* Título */}
                 <td className="py-3.5 px-4">
                   <div className="font-bold text-gray-900 dark:text-white line-clamp-1 max-w-md">
-                    {item.titulo}
+                    {formatEvaluationTitle(item.titulo)}
                   </div>
                   <div className="text-[11px] text-gray-500">{item.especialidadLabel}</div>
                 </td>
@@ -48,7 +49,7 @@ export const EvaluationsTable: React.FC<EvaluationsTableProps> = ({
                 {/* Proceso y Nivel */}
                 <td className="py-3.5 px-4 whitespace-nowrap">
                   <span className="inline-block px-2.5 py-0.5 rounded-md text-[10px] font-extrabold uppercase bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border border-blue-100 dark:border-blue-900">
-                    {item.proceso.replace('_', ' ')}
+                    {formatEvaluationTitle(item.proceso)}
                   </span>
                   <div className="text-[11px] text-gray-400 mt-0.5">{item.modalidad} · {item.nivel}</div>
                 </td>

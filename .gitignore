@@ -23,8 +23,19 @@ yarn-debug.log*
 yarn-error.log*
 
 # local env files
-.env*.local
-.env
+.env*
+!.env.example
+
+# uploads & runtime storage
+/public/uploads/
+/storage_uploads/
+scratch/
+outputs/
+.tmp/
+.testsprite/
+*.tar.gz
+*.zip
+.deploy-backups/
 
 # vercel
 .vercel
@@ -36,5 +47,4 @@ next-env.d.ts
 # prisma local db
 prisma/*.db
 prisma/*.db-journal
-
-.vercel
+

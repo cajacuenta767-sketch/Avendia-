@@ -1,0 +1,16 @@
+{
+  "$schema": "https://raw.githubusercontent.com/TestSprite/testsprite-cli/v0.7.0/schemas/plan.schema.json",
+  "projectId": "c83c6336-38d5-42ed-a742-0c24077b6964",
+  "type": "frontend",
+  "name": "21 - Admin: Banco de Cuadernillos e Inventario General de Exámenes",
+  "planSteps": [
+    {
+      "type": "action",
+      "description": "Navegar a la sección 'Banco de Cuadernillos' dentro de https://cuadernillos.avend.pe/admin."
+    },
+    {
+      "type": "assertion",
+      "description": "Verificar que se liste el inventario completo de exámenes organizados por modalidad, año y disponibilidad de archivos."
+    }
+  ]
+}

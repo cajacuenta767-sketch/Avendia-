@@ -1,0 +1,26 @@
+{
+  "$schema": "https://raw.githubusercontent.com/TestSprite/testsprite-cli/v0.7.0/schemas/plan.schema.json",
+  "projectId": "c83c6336-38d5-42ed-a742-0c24077b6964",
+  "type": "frontend",
+  "name": "Importador legacy exige política y mapeo confirmado antes de escribir",
+  "description": "Un administrador abre el importador y comprueba que la interfaz explica las políticas de membresía y mantiene bloqueada la importación hasta confirmar una vista previa válida.",
+  "priority": "p0",
+  "planSteps": [
+    {
+      "type": "action",
+      "description": "Navigate to the administrative users page with an authenticated administrator session"
+    },
+    {
+      "type": "action",
+      "description": "Open the massive Excel or CSV import dialog"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify the import dialog presents the strict policy and the legacy report policy with clear explanations, and the final import action remains disabled before a file preview and mapping confirmation exist"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify the dialog is arranged as a readable vertical workflow on mobile and desktop, with the file area above the membership, mapping, preview, and final action stages"
+    }
+  ]
+}

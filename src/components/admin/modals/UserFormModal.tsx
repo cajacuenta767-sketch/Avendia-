@@ -1,11 +1,13 @@
 // src/components/admin/modals/UserFormModal.tsx
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 
 export interface UserFormData {
   fullName: string;
   email: string;
+  telefono?: string;
+  pin?: string;
   modalidad: string;
   nivel: string;
   areas: string[];
@@ -39,15 +41,21 @@ const getTodayFormatted = () => {
 
 const calculateEndDate = (startDateStr: string, option: '1_year' | '1_month' | '6_months' | 'custom') => {
   if (option === 'custom') return startDateStr;
+  if (!startDateStr) return getTodayFormatted();
   const d = new Date(startDateStr + 'T00:00:00');
   if (isNaN(d.getTime())) return startDateStr;
-  if (option === '1_year') {
-    d.setFullYear(d.getFullYear() + 1);
-  } else if (option === '1_month') {
-    d.setMonth(d.getMonth() + 1);
-  } else if (option === '6_months') {
-    d.setMonth(d.getMonth() + 6);
+
+  let monthsToAdd = 0;
+  if (option === '1_year') monthsToAdd = 12;
+  else if (option === '6_months') monthsToAdd = 6;
+  else if (option === '1_month') monthsToAdd = 1;
+
+  const targetMonth = d.getMonth() + monthsToAdd;
+  d.setMonth(targetMonth);
+  if (d.getMonth() !== ((targetMonth % 12) + 12) % 12) {
+    d.setDate(0);
   }
+
   const year = d.getFullYear();
   const month = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
@@ -61,21 +69,33 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
 }) => {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
+  const [telefono, setTelefono] = useState('');
+  const [pin, setPin] = useState('');
   const [modalidad, setModalidad] = useState('EBR');
   const [nivel, setNivel] = useState('INICIAL');
-  const [selectedAreaInput, setSelectedAreaInput] = useState('Educación Inicial');
+  const [selectedAreaInput, setSelectedAreaInput] = useState('General');
   const [assignedAreas, setAssignedAreas] = useState<string[]>([]);
   const [errorMessage, setErrorMessage] = useState('');
 
-  // Suscripción y Tipo de Acceso
-  const [duracionOption, setDuracionOption] = useState<'1_year' | '1_month' | '6_months' | 'custom'>('6_months');
+  // Suscripción y Tipo de Acceso (por defecto: 1 año desde hoy)
+  const [duracionOption, setDuracionOption] = useState<'1_year' | '1_month' | '6_months' | 'custom'>('1_year');
   const [fechaInicio, setFechaInicio] = useState(getTodayFormatted());
-  const [fechaFin, setFechaFin] = useState(calculateEndDate(getTodayFormatted(), '6_months'));
+  const [fechaFin, setFechaFin] = useState(calculateEndDate(getTodayFormatted(), '1_year'));
   const [tiposAcceso, setTiposAcceso] = useState<{ Ascenso: boolean; Nombramiento: boolean; Directivo: boolean }>({
     Ascenso: true,
     Nombramiento: true,
     Directivo: true,
   });
+
+  // Al abrir el modal, asegurar siempre que la duración por defecto sea 1 año desde hoy
+  useEffect(() => {
+    if (isOpen) {
+      setDuracionOption('1_year');
+      const today = getTodayFormatted();
+      setFechaInicio(today);
+      setFechaFin(calculateEndDate(today, '1_year'));
+    }
+  }, [isOpen]);
 
   // Niveles disponibles según la modalidad activa
   const nivelesDisponibles = useMemo(() => {
@@ -187,8 +207,15 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
     e.preventDefault();
     setErrorMessage('');
 
-    if (!fullName.trim()) {
+    const cleanFullName = fullName.trim();
+    if (!cleanFullName) {
       setErrorMessage('Ingresa el nombre y apellidos del docente.');
+      return;
+    }
+
+    const INVALID_NAMES = ['JUAN AVEND', 'YADIRA AVENDAÑO Q.', 'YADIRA AVENDAÑO', 'SIN ASIGNAR', 'DOCENTE AVEND', 'ADMINISTRADOR', 'SUPERADMINISTRADOR'];
+    if (INVALID_NAMES.includes(cleanFullName.toUpperCase())) {
+      setErrorMessage('⚠️ Has ingresado un nombre de asesor o marcador de posición ("' + cleanFullName + '"). Por favor ingresa el nombre real del docente.');
       return;
     }
 
@@ -202,8 +229,10 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
       .map(([key]) => key);
 
     onSubmit({
-      fullName: fullName.trim(),
+      fullName: cleanFullName,
       email: email.trim().toLowerCase(),
+      telefono: telefono.trim(),
+      pin: pin || undefined,
       modalidad,
       nivel,
       areas: assignedAreas.length > 0 ? assignedAreas : [areasDisponibles[0]],
@@ -215,13 +244,19 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
 
     setFullName('');
     setEmail('');
+    setTelefono('');
+    setPin('');
     setAssignedAreas([]);
+    setDuracionOption('1_year');
+    const today = getTodayFormatted();
+    setFechaInicio(today);
+    setFechaFin(calculateEndDate(today, '1_year'));
     onClose();
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-200">
-      <div className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+    <div className="responsive-modal-shell fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-200">
+      <div className="responsive-modal-panel relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[90dvh]">
         
         {/* Cabecera Fija del Modal */}
         <div className="p-6 sm:px-8 sm:pt-6 sm:pb-4 border-b border-slate-100 dark:border-slate-800 shrink-0 flex items-start justify-between">
@@ -253,18 +288,22 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4" autoComplete="off">
           {/* Campo: Nombre completo */}
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-              Nombre completo
+              Nombre completo del docente
             </label>
             <input
               type="text"
+              name="docente_real_full_name"
+              autoComplete="off"
+              autoCorrect="off"
+              spellCheck="false"
               required
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
-              placeholder="Nombre y apellidos del docente"
+              placeholder="Ej: Juan Carlos Pérez Mendoza"
               className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-xs font-medium text-slate-900 dark:text-white outline-none focus:border-indigo-600"
             />
           </div>
@@ -276,6 +315,8 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
             </label>
             <input
               type="email"
+              name="docente_email_field"
+              autoComplete="off"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -284,8 +325,43 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
             />
           </div>
 
+          {/* Campo: Número de Celular / WhatsApp */}
+          <div>
+            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+              Número de Celular / WhatsApp
+            </label>
+            <input
+              type="tel"
+              name="docente_phone_field"
+              autoComplete="off"
+              value={telefono}
+              onChange={(e) => setTelefono(e.target.value)}
+              placeholder="Ej: 954562938 (Opcional)"
+              className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-xs font-medium text-slate-900 dark:text-white outline-none focus:border-indigo-600 font-mono"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+              PIN persistente (opcional)
+            </label>
+            <input
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]{4}"
+              maxLength={4}
+              value={pin}
+              onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
+              placeholder="Opcional: puede dejarse vacío"
+              className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-xs font-mono font-bold tracking-widest text-slate-900 dark:text-white outline-none focus:border-indigo-600"
+            />
+            <p className="mt-1 text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+              Si queda vacío, el docente ingresará con el código enviado a su correo. Solo se asignará un PIN si el administrador lo escribe.
+            </p>
+          </div>
+
           {/* Selectores: Modalidad y Nivel */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                 Modalidad
@@ -333,7 +409,7 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
             </label>
 
             {/* Botones Superiores: AGREGAR TODAS vs AGREGAR INDIVIDUALMENTE */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <button
                 type="button"
                 disabled={modalidad === 'EBE'}
@@ -354,7 +430,7 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
             </div>
 
             {/* Panel de Selección Individual */}
-            <div className="flex items-center space-x-2 pt-1">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-1">
               <select
                 value={
                   modalidad === 'EBE'
@@ -365,7 +441,7 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
                 }
                 disabled={modalidad === 'EBE'}
                 onChange={(e) => setSelectedAreaInput(e.target.value)}
-                className="flex-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-xs font-bold text-slate-900 dark:text-white outline-none focus:border-indigo-600 cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed"
+                className="w-full sm:flex-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-xs font-bold text-slate-900 dark:text-white outline-none focus:border-indigo-600 cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed min-w-0"
               >
                 {modalidad === 'EBE' ? (
                   <option value="—">—</option>
@@ -391,7 +467,7 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
               <button
                 type="button"
                 onClick={handleAgregarIndividual}
-                className="bg-[#38a169] hover:bg-[#2f855a] text-white font-extrabold text-xs px-4 py-2.5 rounded-xl transition-colors shrink-0 flex items-center space-x-1 cursor-pointer"
+                className="w-full sm:w-auto bg-[#38a169] hover:bg-[#2f855a] text-white font-extrabold text-xs px-4 py-2.5 rounded-xl transition-colors shrink-0 flex items-center justify-center space-x-1 cursor-pointer"
               >
                 <span>✓ AGREGAR</span>
               </button>
@@ -462,7 +538,7 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
                 ))}
               </div>
 
-              <div className="grid grid-cols-2 gap-3 pt-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                 <div className="space-y-1">
                   <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400">F. Inicio</label>
                   <input

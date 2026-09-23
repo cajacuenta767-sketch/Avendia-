@@ -1,0 +1,16 @@
+{
+  "$schema": "https://raw.githubusercontent.com/TestSprite/testsprite-cli/v0.7.0/schemas/plan.schema.json",
+  "projectId": "c83c6336-38d5-42ed-a742-0c24077b6964",
+  "type": "frontend",
+  "name": "22 - Admin: Filtros Administrativos por Estado (Publicado / Borrador)",
+  "planSteps": [
+    {
+      "type": "action",
+      "description": "En el panel https://cuadernillos.avend.pe/admin, filtrar la tabla de evaluaciones por estado 'BORRADOR' y luego por 'PUBLICADO'."
+    },
+    {
+      "type": "assertion",
+      "description": "Verificar que la tabla responda instantáneamente segmentando los cuadernillos según su estado de publicación."
+    }
+  ]
+}

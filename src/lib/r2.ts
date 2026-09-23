@@ -23,24 +23,22 @@ export const r2Client = new S3Client({
 /**
  * Genera una Signed URL de LECTURA (GetObjectCommand) para acceder a un PDF en Cloudflare R2.
  */
-export async function getSignedPdfUrl(key: string, expiresInSegs: number = 3600): Promise<string> {
+export async function getSignedPdfUrl(key: string, expiresInSegs: number = 300): Promise<string> {
   try {
     if (!key) return '';
 
-    if (!R2_ACCOUNT_ID || !R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY) {
-      return `https://raw.githubusercontent.com/mozilla/pdf.js/master/web/compressed.tracemonkey-pldi-09.pdf#key=${encodeURIComponent(key)}`;
-    }
+    if (!R2_ACCOUNT_ID || !R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY) throw new Error('R2_NOT_CONFIGURED');
 
     const command = new GetObjectCommand({
       Bucket: R2_BUCKET_NAME,
       Key: key,
     });
 
-    const signedUrl = await getSignedUrl(r2Client, command, { expiresIn: expiresInSegs });
+    const signedUrl = await getSignedUrl(r2Client, command, { expiresIn: Math.min(Math.max(expiresInSegs, 1), 300) });
     return signedUrl;
   } catch (error) {
     console.error(`[Cloudflare R2 Error] Error al generar Signed URL para ${key}:`, error);
-    return `https://raw.githubusercontent.com/mozilla/pdf.js/master/web/compressed.tracemonkey-pldi-09.pdf#fallback=true`;
+    throw new Error('R2_SIGNING_FAILED');
   }
 }
 
@@ -56,7 +54,7 @@ export async function getUploadSignedPdfUrl(
   try {
     if (!R2_ACCOUNT_ID || !R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY) {
       // Endpoint simulado para entornos de prueba sin credenciales R2
-      return `https://httpbin.org/put?mockUploadKey=${encodeURIComponent(key)}`;
+      throw new Error('R2_NOT_CONFIGURED');
     }
 
     const command = new PutObjectCommand({
@@ -65,7 +63,7 @@ export async function getUploadSignedPdfUrl(
       ContentType: contentType,
     });
 
-    const uploadSignedUrl = await getSignedUrl(r2Client, command, { expiresIn: expiresInSegs });
+    const uploadSignedUrl = await getSignedUrl(r2Client, command, { expiresIn: Math.min(Math.max(expiresInSegs, 1), 300) });
     return uploadSignedUrl;
   } catch (error) {
     console.error(`[Cloudflare R2 Upload Error] Error al generar Upload URL para ${key}:`, error);

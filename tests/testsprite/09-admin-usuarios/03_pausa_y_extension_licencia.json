@@ -1,0 +1,16 @@
+{
+  "$schema": "https://raw.githubusercontent.com/TestSprite/testsprite-cli/v0.7.0/schemas/plan.schema.json",
+  "projectId": "c83c6336-38d5-42ed-a742-0c24077b6964",
+  "type": "frontend",
+  "name": "25 - Admin Usuarios: Pausar, Reactivar y Extender Licencia de Docentes",
+  "planSteps": [
+    {
+      "type": "action",
+      "description": "En la tabla de usuarios de https://cuadernillos.avend.pe/admin, hacer clic en el botón de pausar/reactivar estado de un usuario."
+    },
+    {
+      "type": "assertion",
+      "description": "Verificar que el estado cambie entre 'PREMIUM' y 'VENCIDO' actualizando la fecha fin y los permisos de acceso de inmediato."
+    }
+  ]
+}

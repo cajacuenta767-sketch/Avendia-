@@ -1,0 +1,16 @@
+{
+  "$schema": "https://raw.githubusercontent.com/TestSprite/testsprite-cli/v0.7.0/schemas/plan.schema.json",
+  "projectId": "c83c6336-38d5-42ed-a742-0c24077b6964",
+  "type": "frontend",
+  "name": "29 - Admin Seguridad: Control de Permisos Granulares (Usuarios, Cuadernillos, Métricas)",
+  "planSteps": [
+    {
+      "type": "action",
+      "description": "En el formulario de administradores de https://cuadernillos.avend.pe/admin, activar o desactivar permisos específicos (Gestión de Usuarios, Gestión de Cuadernillos, Recursos, Métricas)."
+    },
+    {
+      "type": "assertion",
+      "description": "Verificar que el administrador solo tenga acceso a los módulos autorizados según los permisos concedidos."
+    }
+  ]
+}

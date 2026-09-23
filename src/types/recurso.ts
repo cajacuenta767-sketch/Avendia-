@@ -20,7 +20,7 @@ export interface Recurso {
   colorTheme: ColorTheme;        // Tema de color visual para la tarjeta
   paginas: number;
   formato: 'PDF' | 'INFOGRAFIA';
-  urlPdf: string;                // Clave de R2 o URL del PDF
+  urlPdf?: string;               // Clave de R2 o URL del PDF (opcional si aún no se ha subido)
   urlImagen?: string;            // Ruta de la imagen de portada
   isPopular?: boolean;
   status?: 'PUBLICADO' | 'OCULTO';

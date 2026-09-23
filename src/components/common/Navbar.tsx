@@ -6,6 +6,8 @@ import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Logo } from '@/components/ui/Logo';
+import { updatePerfilDocenteAction } from '@/services/usuariosService';
+import { getDocenteSession, clearDocenteSession, saveDocenteSession } from '@/lib/authSession';
 
 function getInitials(name: string): string {
   if (!name) return 'D';
@@ -55,13 +57,10 @@ export const Navbar: React.FC = () => {
     }
 
     try {
-      const raw = localStorage.getItem('docente_session');
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (parsed && (parsed.email || parsed.id || parsed.nombre)) {
-          setDocenteSession(parsed);
-          return;
-        }
+      const activeSession = getDocenteSession();
+      if (activeSession) {
+        setDocenteSession(activeSession);
+        return;
       }
 
       if (currentAdmin) {
@@ -127,19 +126,20 @@ export const Navbar: React.FC = () => {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('docente_session');
+    clearDocenteSession();
     localStorage.removeItem('admin_auth_session');
     sessionStorage.removeItem('admin_auth_session');
+    document.cookie = 'admin_auth_session=; path=/; max-age=0; SameSite=Lax';
     setDocenteSession(null);
     setIsAdminLoggedIn(false);
     setProfileDropdownOpen(false);
-    window.dispatchEvent(new Event('docente_session_change'));
     window.dispatchEvent(new Event('admin_session_change'));
     window.location.href = '/';
   };
 
   const isHomePage = pathname === '/';
 
+  const [profileNombre, setProfileNombre] = useState('');
   const [profileRegion, setProfileRegion] = useState('');
   const [profileIE, setProfileIE] = useState('');
   const [isSavingProfile, setIsSavingProfile] = useState(false);
@@ -147,17 +147,29 @@ export const Navbar: React.FC = () => {
 
   useEffect(() => {
     if (isPerfilModalOpen && docenteSession) {
+      setProfileNombre(docenteSession.nombre || '');
       setProfileRegion((docenteSession as any).region || 'Lima');
       setProfileIE((docenteSession as any).institucionEducativa || '');
       setSaveSuccess(false);
     }
   }, [isPerfilModalOpen, docenteSession]);
 
-  const handleSaveProfile = () => {
+  const handleSaveProfile = async () => {
     if (!docenteSession) return;
     setIsSavingProfile(true);
+
+    try {
+      await updatePerfilDocenteAction({
+        email: docenteSession.email,
+        nombre: profileNombre,
+        region: profileRegion,
+        institucionEducativa: profileIE,
+      });
+    } catch {}
+
     const updated = {
       ...docenteSession,
+      nombre: profileNombre,
       region: profileRegion,
       institucionEducativa: profileIE,
     };
@@ -180,10 +192,10 @@ export const Navbar: React.FC = () => {
   ];
 
   return (
-    <header className="sticky top-0 z-50 w-full bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800">
+    <header className="sticky top-0 z-50 w-full bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
         {/* Logo oficial */}
-        <Logo />
+        <Logo size="md" />
 
         {/* Navegación Desktop Restringida -> Visibilidad condicionada a docenteSession o rol Admin */}
         <nav className="hidden md:flex items-center space-x-2">
@@ -304,48 +316,30 @@ export const Navbar: React.FC = () => {
                 </div>
               )}
             </>
-          ) : (
-            <button
-              type="button"
-              onClick={() => {
-                if (pathname === '/') {
-                  const loginEl = document.getElementById('login-form');
-                  if (loginEl) {
-                    loginEl.scrollIntoView({ behavior: 'smooth' });
-                    return;
-                  }
-                }
-                router.push('/#login-form');
-              }}
-              className="px-5 py-2.5 rounded-xl text-xs font-extrabold text-white bg-blue-600 hover:bg-blue-700 transition-colors flex items-center space-x-2 shadow-xs cursor-pointer"
-            >
-              <svg className="w-4 h-4 text-white shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
-              </svg>
-              <span>Iniciar Sesión</span>
-            </button>
-          )}
+          ) : null}
         </nav>
 
-        {/* Botón Menú Mobile */}
-        <button
-          type="button"
-          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          className="md:hidden p-2 rounded-xl text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-        >
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d={mobileMenuOpen ? 'M6 18L18 6M6 6l12 12' : 'M4 6h16M4 12h16M4 18h16'}
-            />
-          </svg>
-        </button>
+        {/* Botón Menú Mobile (Solo visible si hay sesión o si es admin) */}
+        {(docenteSession || isAdminLoggedIn) && (
+          <button
+            type="button"
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className="md:hidden p-2 rounded-xl text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d={mobileMenuOpen ? 'M6 18L18 6M6 6l12 12' : 'M4 6h16M4 12h16M4 18h16'}
+              />
+            </svg>
+          </button>
+        )}
       </div>
 
       {/* MENÚ MÓVIL DESPLEGABLE (< md) */}
-      {mobileMenuOpen && (
+      {mobileMenuOpen && (docenteSession || isAdminLoggedIn) && (
         <div className="md:hidden bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 p-4 space-y-3 shadow-xl animate-in fade-in slide-in-from-top-2 duration-150">
           {/* Botón Ver como Administrador en Menú Móvil */}
           {isAdminLoggedIn && (
@@ -361,7 +355,9 @@ export const Navbar: React.FC = () => {
                 <span>Ver como administrador</span>
               </Link>
             </div>
-          )}          {docenteSession ? (
+          )}
+
+          {docenteSession && (
             <>
               {/* Módulos Internos Visibles Únicamente con Sesión Activa */}
               <div className="space-y-1">
@@ -429,30 +425,6 @@ export const Navbar: React.FC = () => {
                 </div>
               </div>
             </>
-          ) : (
-            /* Vista Pública sin Sesión: Solo Botón Principal de Iniciar Sesión */
-            <div className="py-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  if (pathname === '/') {
-                    const loginEl = document.getElementById('login-form');
-                    if (loginEl) {
-                      loginEl.scrollIntoView({ behavior: 'smooth' });
-                      return;
-                    }
-                  }
-                  router.push('/#login-form');
-                }}
-                className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-md transition-colors text-center cursor-pointer flex items-center justify-center space-x-2"
-              >
-                <svg className="w-4 h-4 text-white shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
-                </svg>
-                <span>Iniciar Sesión</span>
-              </button>
-            </div>
           )}
         </div>
       )}
@@ -489,23 +461,38 @@ export const Navbar: React.FC = () => {
             )}
 
             <div className="space-y-3">
-              {/* 1. Nombre Completo */}
-              <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-800 space-y-0.5">
-                <span className="text-[10px] font-extrabold uppercase text-slate-400 dark:text-slate-500 tracking-wider">
+              {/* 1. Nombre Completo (Editable) */}
+              <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-800 space-y-1">
+                <label className="text-[10px] font-extrabold uppercase text-slate-400 dark:text-slate-500 tracking-wider block">
                   Nombre Completo
-                </span>
-                <p className="font-black text-xs text-slate-900 dark:text-white">
-                  {docenteSession.nombre}
-                </p>
+                </label>
+                <input
+                  type="text"
+                  value={profileNombre}
+                  onChange={(e) => setProfileNombre(e.target.value)}
+                  className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-600"
+                />
               </div>
 
-              {/* 2. Correo Electrónico */}
-              <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-800 space-y-0.5">
-                <span className="text-[10px] font-extrabold uppercase text-slate-400 dark:text-slate-500 tracking-wider">
-                  Correo Electrónico
-                </span>
-                <p className="font-semibold text-xs text-slate-800 dark:text-slate-200 truncate">
-                  {docenteSession.email}
+              {/* 2. Correo Electrónico (Bloqueado / Solo Lectura) */}
+              <div className="p-3 bg-slate-100 dark:bg-slate-800/80 rounded-xl border border-slate-200 dark:border-slate-700 space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-extrabold uppercase text-slate-400 dark:text-slate-500 tracking-wider">
+                    Correo Electrónico
+                  </span>
+                  <span className="text-[9px] font-bold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/80 px-2 py-0.5 rounded-full border border-amber-200 dark:border-amber-800">
+                    🔒 No modificable
+                  </span>
+                </div>
+                <input
+                  type="email"
+                  value={docenteSession.email}
+                  disabled
+                  readOnly
+                  className="w-full bg-slate-200/70 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-500 dark:text-slate-400 cursor-not-allowed outline-none select-none"
+                />
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 italic mt-0.5">
+                  💡 Para modificar tu correo registrado, solicítalo al Administrador desde la consola de gestión.
                 </p>
               </div>
 

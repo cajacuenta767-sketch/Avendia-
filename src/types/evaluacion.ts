@@ -15,6 +15,9 @@ export type NivelEducativo =
   | 'PRIMARIA'
   | 'SECUNDARIA'
   | 'SUPERIOR_TECNICO'
+  | 'EBA_INICIAL_INTERMEDIO'
+  | 'EBA_AVANZADO'
+  | 'CETPRO_TECNICO'
   | 'NO_APLICA';
 
 export type EspecialidadMinedu = 
@@ -31,8 +34,21 @@ export type EspecialidadMinedu =
   | 'PRIMARIA_GENERAL'
   | 'INICIAL_GENERAL';
 
+export const AREAS_EBA_AVANZADO = [
+  'Comunicación',
+  'Matemática',
+  'Ciencia, Tecnología y Salud',
+  'Ciencias Sociales',
+  'Desarrollo Personal y Ciudadano',
+  'Educación para el Trabajo (EPT)',
+  'Inglés',
+  'Educación Física',
+  'Educación Religiosa',
+  'Arte y Cultura',
+];
+
 export interface ResourceLinks {
-  cuadernilloKey: string;      // Clave de R2 para el PDF del Cuadernillo principal
+  cuadernilloKey?: string;     // Ruta o clave del PDF del Cuadernillo principal (opcional si aún no está subido)
   resolucionKey?: string;      // Clave de R2 para la Resolución explicada (opcional)
   clavesKey?: string;          // Clave de R2 para la tabla de Claves oficiales (opcional)
   origenCuadernillo?: 'MINEDU' | 'AVEND' | string;
@@ -52,10 +68,12 @@ export interface Evaluacion {
   nivel: NivelEducativo;
   especialidad: EspecialidadMinedu | string;
   especialidadLabel: string;   // Nombre amigable ej. "Secundaria - Matemática"
+  tipoCuadernillo?: string;
   codigo?: string;             // Código específico de cuadernillo ingresado por Admin
   codigoCuadernillo?: string;
   codigoResolucion?: string;
   codigoClaves?: string;
+  estado?: 'PUBLICADO' | 'BORRADOR' | string;
   anio: number;
   isLatest?: boolean;          // Badge "Más Reciente"
   resources: ResourceLinks;
@@ -64,12 +82,13 @@ export interface Evaluacion {
 }
 
 export interface EvaluacionesFilterParams {
-  proceso?: ProcesoMinedu | 'TODOS';
-  modalidad?: ModalidadEducativa | 'TODOS';
-  nivel?: NivelEducativo | 'TODOS';
-  especialidad?: string | 'TODOS';
-  anio?: number | 'TODOS';
+  proceso?: ProcesoMinedu | 'TODOS' | '';
+  modalidad?: ModalidadEducativa | 'TODOS' | '';
+  nivel?: NivelEducativo | 'TODOS' | '';
+  especialidad?: string | 'TODOS' | '';
+  anio?: number | 'TODOS' | '';
   searchQuery?: string;
+  includeDrafts?: boolean;
 }
 
 export interface ProcessOption {
@@ -77,4 +96,44 @@ export interface ProcessOption {
   label: string;
   description: string;
   badgeCount?: number;
+}
+
+export interface EvaluacionMasivaInput {
+  proceso: string;
+  tipoCuadernillo: string;
+  anio: string;
+  urlCuadernillo?: string;
+  urlResolucion?: string;
+  urlClaves?: string;
+  origenCuadernillo?: string;
+  origenResolucion?: string;
+  origenClaves?: string;
+  codigoCuadernillo?: string;
+  codigoResolucion?: string;
+  codigoClaves?: string;
+  estado?: string;
+  esPremium?: boolean;
+  categorias: Array<{
+    modalidad: string;
+    nivel: string;
+    area: string;
+  }>;
+}
+
+// Función estricta para generar la firma de comparación (Cero Falsos Positivos)
+export function getEvaluacionSignature(item: {
+  proceso: string;
+  modalidad: string;
+  nivel?: string | null;
+  area: string;
+  anio: string | number;
+  tipoCuadernillo?: string | null;
+}): string {
+  const proc = String(item.proceso || '').trim().toLowerCase();
+  const mod = String(item.modalidad || '').trim().toLowerCase();
+  const niv = String(item.nivel || 'NONE').trim().toLowerCase();
+  const esp = String(item.area || '').trim().toLowerCase();
+  const year = String(item.anio || '').trim();
+  const tipo = String(item.tipoCuadernillo || 'NONE').trim().toLowerCase();
+  return `${proc}__${mod}__${niv}__${esp}__${year}__${tipo}`;
 }

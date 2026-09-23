@@ -1,0 +1,20 @@
+{
+  "$schema": "https://raw.githubusercontent.com/TestSprite/testsprite-cli/v0.7.0/schemas/plan.schema.json",
+  "projectId": "c83c6336-38d5-42ed-a742-0c24077b6964",
+  "type": "frontend",
+  "name": "09 - Vigencias: Banner superior de 24 Horas con reloj digital y modal de expiración",
+  "planSteps": [
+    {
+      "type": "action",
+      "description": "Iniciar sesión en https://cuadernillos.avend.pe/cuadernillos con un usuario registrado con rol 'PRUEBA_GRATIS_24H'."
+    },
+    {
+      "type": "assertion",
+      "description": "Verificar que aparezca en la parte superior la barra naranja fija con el reloj digital HH:MM:SS en cuenta regresiva."
+    },
+    {
+      "type": "assertion",
+      "description": "Verificar que los usuarios regulares con rol 'DOCENTE' tengan la pantalla limpia y no vean el banner de cuenta regresiva."
+    }
+  ]
+}

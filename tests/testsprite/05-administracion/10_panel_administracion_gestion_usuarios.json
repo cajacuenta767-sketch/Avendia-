@@ -1,0 +1,16 @@
+{
+  "$schema": "https://raw.githubusercontent.com/TestSprite/testsprite-cli/v0.7.0/schemas/plan.schema.json",
+  "projectId": "c83c6336-38d5-42ed-a742-0c24077b6964",
+  "type": "frontend",
+  "name": "10 - Administración: Acceso seguro al panel y gestión de usuarios",
+  "planSteps": [
+    {
+      "type": "action",
+      "description": "Navegar a https://cuadernillos.avend.pe/admin y validar credenciales de administrador."
+    },
+    {
+      "type": "assertion",
+      "description": "Verificar que carguen las pestañas de 'Evaluaciones', 'Usuarios', 'Métricas' y 'Actividad' con la tabla de docentes registrados."
+    }
+  ]
+}

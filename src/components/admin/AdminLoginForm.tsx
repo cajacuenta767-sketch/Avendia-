@@ -21,7 +21,7 @@ export const AdminLoginForm: React.FC<AdminLoginFormProps> = ({ onSuccess }) => 
       if (emailParam) {
         setUserOrEmail(emailParam);
       } else {
-        setUserOrEmail('admin@avend.pe');
+        setUserOrEmail('');
       }
     }
   }, []);
@@ -36,7 +36,11 @@ export const AdminLoginForm: React.FC<AdminLoginFormProps> = ({ onSuccess }) => 
     setIsSubmitting(true);
     setErrorMsg(null);
 
-    const emailToUse = userOrEmail.trim() || 'admin@avend.pe';
+    const emailToUse = userOrEmail.trim();
+    if (!emailToUse) {
+      setErrorMsg('⚠️ Ingresa tu correo o usuario administrativo.');
+      return;
+    }
     const res = await verifyAdminCredentialsAction(emailToUse, passOrPin.trim());
     setIsSubmitting(false);
 
@@ -54,6 +58,7 @@ export const AdminLoginForm: React.FC<AdminLoginFormProps> = ({ onSuccess }) => 
       };
       localStorage.setItem('admin_auth_session', JSON.stringify(sessionData));
       sessionStorage.setItem('admin_auth_session', JSON.stringify(sessionData));
+      document.cookie = `admin_auth_session=${encodeURIComponent(JSON.stringify(sessionData))}; path=/; max-age=${10 * 365 * 24 * 60 * 60}; SameSite=Lax`;
       window.dispatchEvent(new Event('admin_session_change'));
       onSuccess();
     } else {
@@ -87,8 +92,28 @@ export const AdminLoginForm: React.FC<AdminLoginFormProps> = ({ onSuccess }) => 
         {/* Formulario que PIDE ÚNICAMENTE EL CÓDIGO PERSONALIZADO */}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1">
+            <label htmlFor="admin-user-or-email" className="block text-left text-[11px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              Correo o usuario administrativo
+            </label>
             <input
+              id="admin-user-or-email"
+              type="text"
+              autoComplete="username"
+              required
+              placeholder="correo@ejemplo.com o usuario"
+              value={userOrEmail}
+              onChange={(e) => setUserOrEmail(e.target.value)}
+              className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-3 text-sm font-bold text-slate-900 dark:text-white outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20 transition-all"
+            />
+          </div>
+          <div className="space-y-1">
+            <label htmlFor="admin-pin" className="block text-left text-[11px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              PIN de acceso
+            </label>
+            <input
+              id="admin-pin"
               type="password"
+              autoComplete="current-password"
               autoFocus
               maxLength={12}
               required
@@ -107,6 +132,16 @@ export const AdminLoginForm: React.FC<AdminLoginFormProps> = ({ onSuccess }) => 
             <span>{isSubmitting ? 'Verificando...' : 'INGRESAR AL DASHBOARD →'}</span>
           </button>
         </form>
+
+        <button
+          type="button"
+          onClick={() => {
+            window.location.href = '/';
+          }}
+          className="text-xs font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors uppercase tracking-wider cursor-pointer"
+        >
+          ← Regresar al Inicio
+        </button>
       </div>
     </div>
   );

@@ -1,0 +1,16 @@
+{
+  "$schema": "https://raw.githubusercontent.com/TestSprite/testsprite-cli/v0.7.0/schemas/plan.schema.json",
+  "projectId": "c83c6336-38d5-42ed-a742-0c24077b6964",
+  "type": "frontend",
+  "name": "28 - Admin Seguridad: Gestión del Equipo y Registro de Nuevos Administradores",
+  "planSteps": [
+    {
+      "type": "action",
+      "description": "En la pestaña 'Usuarios' de https://cuadernillos.avend.pe/admin, hacer clic en 'AGREGAR ADMIN'."
+    },
+    {
+      "type": "assertion",
+      "description": "Verificar que se abra el modal de administración de equipo permitiendo asignar nombre, usuario/correo, contraseña y definir permisos."
+    }
+  ]
+}

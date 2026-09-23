@@ -1,0 +1,20 @@
+{
+  "$schema": "https://raw.githubusercontent.com/TestSprite/testsprite-cli/v0.7.0/schemas/plan.schema.json",
+  "projectId": "c83c6336-38d5-42ed-a742-0c24077b6964",
+  "type": "frontend",
+  "name": "06 - Visor: Apertura de PDF de Cuadernillos y Claves",
+  "planSteps": [
+    {
+      "type": "action",
+      "description": "Navegar a https://cuadernillos.avend.pe/cuadernillos y localizar una tarjeta de evaluación disponible."
+    },
+    {
+      "type": "action",
+      "description": "Hacer clic en el botón 'VER CUADERNILLO' o 'VER CLAVES'."
+    },
+    {
+      "type": "assertion",
+      "description": "Verificar que se abra el modal del visor de PDF cargando el documento oficial de forma segura con controles de zoom y navegación."
+    }
+  ]
+}

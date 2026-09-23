@@ -1,0 +1,42 @@
+{
+  "$schema": "https://raw.githubusercontent.com/TestSprite/testsprite-cli/v0.7.0/schemas/plan.schema.json",
+  "projectId": "c83c6336-38d5-42ed-a742-0c24077b6964",
+  "type": "frontend",
+  "name": "Los cambios rápidos conservan solamente los filtros y años más recientes",
+  "description": "Una secuencia rápida de cambios de modalidad, nivel y especialidad no permite que respuestas anteriores reemplacen las tarjetas o los años de la selección final.",
+  "priority": "p1",
+  "planSteps": [
+    {
+      "type": "action",
+      "description": "Navegar al Banco de Cuadernillos con una sesión docente válida."
+    },
+    {
+      "type": "action",
+      "description": "Seleccionar Nombramiento Docente como proceso."
+    },
+    {
+      "type": "action",
+      "description": "Seleccionar EBR como modalidad."
+    },
+    {
+      "type": "action",
+      "description": "Seleccionar Primaria como nivel."
+    },
+    {
+      "type": "action",
+      "description": "Cambiar sucesivamente entre Primaria, Educación Física y Profesor de Innovación Pedagógica."
+    },
+    {
+      "type": "action",
+      "description": "Dejar Educación Física como selección final."
+    },
+    {
+      "type": "assertion",
+      "description": "Verificar que el banner, la URL, el selector de especialidad, los años disponibles y todas las tarjetas corresponden únicamente a Educación Física."
+    },
+    {
+      "type": "assertion",
+      "description": "Verificar que no reaparecen tarjetas ni años pertenecientes exclusivamente a una selección anterior después de terminar la carga."
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "$schema": "https://raw.githubusercontent.com/TestSprite/testsprite-cli/v0.7.0/schemas/plan.schema.json",
+  "projectId": "c83c6336-38d5-42ed-a742-0c24077b6964",
+  "type": "frontend",
+  "name": "11 - Administración: Modal de Importación Masiva desde Excel",
+  "planSteps": [
+    {
+      "type": "action",
+      "description": "En el panel de administración https://cuadernillos.avend.pe/admin, ir a la pestaña 'Usuarios' y hacer clic en el botón 'IMPORTAR EXCEL'."
+    },
+    {
+      "type": "assertion",
+      "description": "Verificar que se abra el modal de importación masiva con la zona para arrastrar archivos .xlsx/.xls y la opción de descargar la plantilla base."
+    }
+  ]
+}

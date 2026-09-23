@@ -14,6 +14,34 @@ body {
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
 }
 
+/* Controles con varias opciones: en móvil se apilan completos; en pantallas
+   medianas se distribuyen sin recortar etiquetas ni contadores. */
+.responsive-control-group {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.375rem;
+  width: 100%;
+}
+
+@media (min-width: 640px) {
+  .responsive-control-group {
+    grid-template-columns: repeat(var(--responsive-control-columns, 2), minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 639px) {
+  .responsive-modal-shell {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .responsive-modal-panel {
+    max-height: min(92dvh, 760px);
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+}
+
 /* Scrollbar ultra fino y elegante para modales internos */
 .custom-scrollbar::-webkit-scrollbar {
   width: 5px;
@@ -34,4 +62,50 @@ body {
 }
 .dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: #475569;
+}
+
+/* ==========================================================================
+   ESTILOS DE IMPRESIÓN LIMPIA DE ALTA FIDELIDAD (@media print)
+   ========================================================================== */
+@media print {
+  @page {
+    size: auto;
+    margin: 0mm;
+  }
+
+  html, body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+  }
+
+  /* Ocultar elementos de navegación, modales y barras al imprimir */
+  header,
+  nav,
+  footer,
+  aside,
+  button,
+  .no-print,
+  .backdrop-blur-md {
+    display: none !important;
+  }
+
+  /* Si el modal del visor está activo, expandir el visor a 100% */
+  #pdf-viewer-print-container,
+  #pdf-viewer-print-container iframe {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+    z-index: 9999999 !important;
+  }
 }

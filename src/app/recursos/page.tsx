@@ -1,7 +1,7 @@
 // src/app/recursos/page.tsx
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { ResourceSearch } from '@/components/recursos/ResourceSearch';
 import { ResourceCard } from '@/components/recursos/ResourceCard';
@@ -17,14 +17,29 @@ export default function RecursosPage() {
   const [selectedCategory, setSelectedCategory] = useState<CategoriaRecurso | 'TODOS'>('TODOS');
   const [recursos, setRecursos] = useState<Recurso[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const recursosRequestIdRef = useRef(0);
 
-  // Guard de Navegación Estricta
+  const [hasSession, setHasSession] = useState<boolean | null>(null);
+
+  // Guard de Navegación Estricta (Auth Guard)
   useEffect(() => {
-    const sessionStr = localStorage.getItem('docente_session');
-    const adminSessionStr = localStorage.getItem('admin_auth_session') || sessionStorage.getItem('admin_auth_session');
-    if (!sessionStr && !adminSessionStr) {
-      router.replace('/');
-    }
+    const checkSession = () => {
+      const sessionStr = localStorage.getItem('docente_session');
+      const adminSessionStr = localStorage.getItem('admin_auth_session') || sessionStorage.getItem('admin_auth_session');
+      if (!sessionStr && !adminSessionStr) {
+        setHasSession(false);
+        router.replace('/');
+      } else {
+        setHasSession(true);
+      }
+    };
+    checkSession();
+    window.addEventListener('docente_session_change', checkSession);
+    window.addEventListener('admin_session_change', checkSession);
+    return () => {
+      window.removeEventListener('docente_session_change', checkSession);
+      window.removeEventListener('admin_session_change', checkSession);
+    };
   }, [router]);
 
   // Modal de Auth
@@ -40,28 +55,32 @@ export default function RecursosPage() {
   });
 
   const fetchRecursos = useCallback(async () => {
-    // Si ya tenemos recursos cargados, no ocultamos la pantalla con bloques grises
-    if (recursos.length === 0) {
-      setIsLoading(true);
+    const requestId = ++recursosRequestIdRef.current;
+    setIsLoading(true);
+    setRecursos([]);
+
+    try {
+      const response = await getRecursosAction(searchQuery, selectedCategory);
+      if (requestId !== recursosRequestIdRef.current) return;
+
+      setRecursos(response.success ? response.data : []);
+    } finally {
+      if (requestId === recursosRequestIdRef.current) {
+        setIsLoading(false);
+      }
     }
-    const response = await getRecursosAction(searchQuery, selectedCategory);
-    if (response.success && response.data.length > 0) {
-      setRecursos(response.data);
-    }
-    setIsLoading(false);
-  }, [searchQuery, selectedCategory, recursos.length]);
+  }, [searchQuery, selectedCategory]);
 
   useEffect(() => {
     fetchRecursos();
   }, [fetchRecursos]);
 
   const triggerOpenPdf = async (recurso: Recurso) => {
-    const signedRes = await getRecursoSignedUrlAction(recurso.id);
-    const rawUrl = signedRes.success ? signedRes.data.signedUrl : recurso.urlPdf;
-    const pdfSignedUrl =
-      rawUrl && (rawUrl.startsWith('/') || rawUrl.startsWith('http'))
-        ? rawUrl
-        : '/uploads/cuadernillos/cuadernillo-inicial-2024.pdf';
+    if (!recurso.urlPdf) return;
+
+    const initialUrl = recurso.urlPdf.startsWith('/') || recurso.urlPdf.startsWith('http')
+      ? recurso.urlPdf
+      : `/api/pdf-stream?url=${encodeURIComponent(recurso.urlPdf)}`;
 
     const evalAdaptada: Evaluacion = {
       id: recurso.id,
@@ -74,7 +93,7 @@ export default function RecursosPage() {
       especialidadLabel: recurso.categoriaLabel,
       anio: 2024,
       resources: {
-        cuadernilloKey: pdfSignedUrl,
+        cuadernilloKey: initialUrl,
       },
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -84,9 +103,31 @@ export default function RecursosPage() {
       isOpen: true,
       evaluacion: evalAdaptada,
     });
+
+    // 2. Obtener URL firmada asíncronamente
+    try {
+      const signedRes = await getRecursoSignedUrlAction(recurso.id);
+      if (signedRes.success && signedRes.data?.signedUrl) {
+        setModalState((prev) => {
+          if (!prev.isOpen || prev.evaluacion?.id !== recurso.id) return prev;
+          return {
+            ...prev,
+            evaluacion: {
+              ...prev.evaluacion!,
+              resources: {
+                cuadernilloKey: signedRes.data.signedUrl,
+              },
+            },
+          };
+        });
+      }
+    } catch (err) {
+      console.error('Error al resolver enlace de recurso PDF:', err);
+    }
   };
 
   const handleOpenPdf = (recurso: Recurso) => {
+    if (!recurso.urlPdf) return;
     const session = localStorage.getItem('docente_session');
     const adminSession = localStorage.getItem('admin_auth_session') || sessionStorage.getItem('admin_auth_session');
     if (!session && !adminSession) {
@@ -110,6 +151,14 @@ export default function RecursosPage() {
       evaluacion: null,
     });
   };
+
+  if (hasSession === false || hasSession === null) {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex items-center justify-center text-xs font-black text-slate-400">
+        Verificando acceso a la plataforma...
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50/50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 py-10 px-4 sm:px-6 lg:px-8">

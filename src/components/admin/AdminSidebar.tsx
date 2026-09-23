@@ -12,6 +12,14 @@ interface AdminSidebarProps {
 }
 
 export const AdminSidebar: React.FC<AdminSidebarProps> = ({ activeTab, onTabChange, onLogout }) => {
+  const resolveAdminName = (parsed: any): string => {
+    const email = (parsed?.email || '').toLowerCase();
+    if (email === 'cajacuenta767@gmail.com' || email === 'cajacuenta767') {
+      return 'Bryan';
+    }
+    return parsed?.name || parsed?.usuario || 'Administrador';
+  };
+
   const [adminUser, setAdminUser] = useState<{ name: string; email: string; role: string }>(() => {
     if (typeof window !== 'undefined') {
       const sessionStr = localStorage.getItem('admin_auth_session') || sessionStorage.getItem('admin_auth_session');
@@ -19,9 +27,18 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ activeTab, onTabChan
         try {
           const parsed = JSON.parse(sessionStr);
           const email = (parsed.email || '').toLowerCase();
-          const isSuper = email === 'cajacuenta767@gmail.com';
+          const superList = ['cajacuenta767@gmail.com', 'avendoficial@gmail.com', 'avendocente@gmail.com', 'cajacuenta767', 'avendoficial', 'avendocente'];
+          const isSuper = superList.includes(email);
+          const finalName = resolveAdminName(parsed);
+
+          // Si el nombre guardado era el antiguo, actualizar el storage
+          if (parsed.name !== finalName) {
+            parsed.name = finalName;
+            localStorage.setItem('admin_auth_session', JSON.stringify(parsed));
+          }
+
           return {
-            name: parsed.name || 'Administrador',
+            name: finalName,
             email: parsed.email || '',
             role: isSuper ? 'SUPERADMINISTRADOR' : (parsed.role || 'ADMINISTRADOR'),
           };
@@ -51,9 +68,17 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ activeTab, onTabChan
         try {
           const parsed = JSON.parse(sessionStr);
           const email = (parsed.email || '').toLowerCase();
-          const isSuper = email === 'cajacuenta767@gmail.com';
+          const superList = ['cajacuenta767@gmail.com', 'avendocente@gmail.com', 'cajacuenta767', 'avendocente'];
+          const isSuper = superList.includes(email);
+          const finalName = resolveAdminName(parsed);
+
+          if (parsed.name !== finalName) {
+            parsed.name = finalName;
+            localStorage.setItem('admin_auth_session', JSON.stringify(parsed));
+          }
+
           setAdminUser({
-            name: parsed.name || 'Administrador',
+            name: finalName,
             email: parsed.email || '',
             role: isSuper ? 'SUPERADMINISTRADOR' : (parsed.role || 'ADMINISTRADOR'),
           });

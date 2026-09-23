@@ -1,33 +1,28 @@
-// src/components/ui/Logo.tsx
-import React from 'react';
+'use client';
+
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 
 interface LogoProps {
   className?: string;
-  showText?: boolean;
+  size?: 'sm' | 'md' | 'lg';
+  href?: string;
 }
 
-export const Logo: React.FC<LogoProps> = ({ className = '', showText = true }) => {
-  return (
-    <Link href="/" className={`inline-flex items-center space-x-3 group ${className}`}>
-      {/* Isotipo: Icono de Barras Ascendentes */}
-      <div className="relative flex items-end justify-center space-x-1 w-10 h-10 p-2 rounded-2xl bg-gradient-to-tr from-blue-700 via-blue-600 to-cyan-500 shadow-md shadow-blue-500/20 group-hover:scale-105 transition-transform duration-200">
-        <span className="w-1.5 h-3.5 bg-white/70 rounded-full" />
-        <span className="w-1.5 h-5 bg-white/90 rounded-full" />
-        <span className="w-1.5 h-7 bg-white rounded-full shadow-xs" />
-      </div>
+export const Logo: React.FC<LogoProps> = ({ className = '', size = 'md', href = '/cuadernillos' }) => {
+  const sizeClasses = {
+    sm: 'h-8 sm:h-9',
+    md: 'h-9 sm:h-10 md:h-11',
+    lg: 'h-11 sm:h-12 md:h-14',
+  };
 
-      {/* Logotipo Texto */}
-      {showText && (
-        <div className="flex flex-col leading-none">
-          <span className="font-black text-xl tracking-tight text-gray-900 dark:text-white">
-            AVEND <span className="text-blue-600 dark:text-blue-400">ESCALA</span>
-          </span>
-          <span className="text-[10px] font-bold tracking-widest text-gray-400 dark:text-gray-500 uppercase mt-0.5">
-            PLATAFORMA DOCENTE
-          </span>
-        </div>
-      )}
+  return (
+    <Link href={href} className={`inline-flex items-center group transition-transform active:scale-95 py-0.5 ${className}`}>
+      <img
+        src="/logo.png"
+        alt="AVEND ESCALA - Plataforma Docente"
+        className={`${sizeClasses[size]} w-auto object-contain drop-shadow-xs group-hover:scale-105 transition-transform duration-200`}
+      />
     </Link>
   );
 };

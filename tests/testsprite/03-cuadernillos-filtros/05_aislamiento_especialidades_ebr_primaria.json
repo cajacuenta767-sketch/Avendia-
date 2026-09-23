@@ -1,0 +1,58 @@
+{
+  "$schema": "https://raw.githubusercontent.com/TestSprite/testsprite-cli/v0.7.0/schemas/plan.schema.json",
+  "projectId": "c83c6336-38d5-42ed-a742-0c24077b6964",
+  "type": "frontend",
+  "name": "Las especialidades múltiples permanecen aisladas y los niveles únicos conservan sus cuadernillos",
+  "description": "Al alternar entre Primaria, Educación Física y Profesor de Innovación Pedagógica, las tarjetas permanecen aisladas; al elegir EBR Inicial aparecen todos sus registros históricos dentro del nivel correcto.",
+  "priority": "p0",
+  "planSteps": [
+    {
+      "type": "action",
+      "description": "Navegar al Banco de Cuadernillos con una sesión docente válida."
+    },
+    {
+      "type": "action",
+      "description": "Seleccionar Nombramiento Docente como proceso."
+    },
+    {
+      "type": "action",
+      "description": "Seleccionar EBR como modalidad."
+    },
+    {
+      "type": "action",
+      "description": "Seleccionar Primaria como nivel."
+    },
+    {
+      "type": "action",
+      "description": "Seleccionar Educación Física como especialidad."
+    },
+    {
+      "type": "assertion",
+      "description": "Verificar que todas las tarjetas del repositorio completo pertenecen a EBR Primaria Educación Física y que no aparecen tarjetas de Primaria ni de Profesor de Innovación Pedagógica."
+    },
+    {
+      "type": "action",
+      "description": "Abrir la pestaña Habilidades Generales."
+    },
+    {
+      "type": "assertion",
+      "description": "Verificar que todas las tarjetas visibles de Habilidades Generales continúan perteneciendo a Educación Física."
+    },
+    {
+      "type": "action",
+      "description": "Cambiar la especialidad a Profesor de Innovación Pedagógica."
+    },
+    {
+      "type": "assertion",
+      "description": "Verificar que todas las tarjetas visibles pertenecen a Profesor de Innovación Pedagógica y que no aparecen tarjetas de Educación Física ni de Primaria."
+    },
+    {
+      "type": "action",
+      "description": "Cambiar el nivel a Inicial y seleccionar el área Inicial."
+    },
+    {
+      "type": "assertion",
+      "description": "Verificar que aparecen todos los cuadernillos publicados de EBR Inicial, incluidos los registros históricos, sin mostrar materiales de Primaria ni Secundaria."
+    }
+  ]
+}

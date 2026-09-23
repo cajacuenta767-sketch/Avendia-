@@ -7,7 +7,6 @@ import {
   createRecursoAction,
   updateRecursoAction,
   deleteRecursoAction,
-  getRecursoSignedUrlAction,
 } from '@/services/recursosService';
 import { CategoriaRecurso, Recurso } from '@/types/recurso';
 
@@ -44,10 +43,10 @@ export const RecursosAdminView: React.FC = () => {
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  // 1. Carga Inicial Local desde PostgreSQL
+  // 1. Carga Inicial Local desde PostgreSQL (incluyendo borradores para el admin)
   useEffect(() => {
     async function loadRecursos() {
-      const res = await getRecursosAction();
+      const res = await getRecursosAction('', 'TODOS', true);
       if (res.success && res.data.length > 0) {
         const mapped: RecursoCardItem[] = res.data.map((item: Recurso, idx: number) => ({
           id: item.id,
@@ -75,7 +74,7 @@ export const RecursosAdminView: React.FC = () => {
     );
   };
 
-  // 2. Agregar nuevo recurso
+  // 2. Agregar nuevo recurso (inicialmente como BORRADOR)
   const handleAgregarRecurso = async () => {
     setIsSubmitting(true);
     const nextNumber = recursosList.length + 1;
@@ -89,6 +88,7 @@ export const RecursosAdminView: React.FC = () => {
       number: nextNumber,
       categoria: 'CASUISTICA_PEDAGOGICA',
       colorHeader: bgHeader.replace('bg-', '').replace('-400', ''),
+      estado: 'OCULTO',
     });
 
     setIsSubmitting(false);
@@ -100,14 +100,14 @@ export const RecursosAdminView: React.FC = () => {
         title: res.data.titulo,
         description: res.data.descripcion || defaultDesc,
         category: res.data.categoria,
-        estado: 'PUBLICADO',
+        estado: 'OCULTO',
         bgHeader,
         pdfStatus: 'IDLE',
         imgStatus: 'IDLE',
         hasImageError: false,
       };
       setRecursosList([...recursosList, nuevoItem]);
-      showToast('✨ Recurso creado en PostgreSQL local.');
+      showToast('✨ Nuevo recurso creado como Borrador.');
     } else {
       showToast(`❌ ${res.error.message}`);
     }
@@ -123,7 +123,7 @@ export const RecursosAdminView: React.FC = () => {
     await updateRecursoAction(id, { titulo: title.trim() });
   };
 
-  // 4. Editar Descripción (Nuevo Campo Solicitado)
+  // 4. Editar Descripción
   const handleDescriptionChange = (id: string, newDesc: string) => {
     setRecursosList((prev) => prev.map((r) => (r.id === id ? { ...r, description: newDesc } : r)));
   };
@@ -133,89 +133,140 @@ export const RecursosAdminView: React.FC = () => {
   };
 
   // 5. Subir Imagen Local
-  const handleSubirImagen = (id: string, file: File) => {
-    const reader = new FileReader();
-
+  const handleSubirImagen = async (id: string, file: File) => {
     setRecursosList((prev) =>
       prev.map((r) => (r.id === id ? { ...r, imgStatus: 'UPLOADING' } : r))
     );
 
-    reader.onload = async (e) => {
-      const base64String = e.target?.result as string;
+    try {
+      const formData = new FormData();
+      formData.append('id', id);
+      formData.append('type', 'image');
+      formData.append('file', file);
 
-      setRecursosList((prev) =>
-        prev.map((r) =>
-          r.id === id
-            ? {
-                ...r,
-                urlImagen: base64String,
-                hasImageError: false,
-                imgStatus: 'SUCCESS',
-              }
-            : r
-        )
-      );
+      const res = await fetch('/api/recursos/upload', {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await res.json();
 
-      const updateRes = await updateRecursoAction(id, { urlImagen: base64String });
-      if (updateRes.success) {
-        showToast('✔ Imagen guardada en PostgreSQL local.');
+      if (data.success && data.data?.url) {
+        setRecursosList((prev) =>
+          prev.map((r) =>
+            r.id === id
+              ? {
+                  ...r,
+                  urlImagen: data.data.url,
+                  hasImageError: false,
+                  imgStatus: 'SUCCESS',
+                }
+              : r
+          )
+        );
+        showToast('✔ Imagen subida y guardada exitosamente.');
       } else {
-        showToast(`❌ Error al guardar en base de datos.`);
+        throw new Error(data.error?.message || 'Error al subir imagen');
       }
-    };
-
-    reader.readAsDataURL(file);
+    } catch (err: any) {
+      console.error('Error subiendo imagen:', err);
+      setRecursosList((prev) =>
+        prev.map((r) => (r.id === id ? { ...r, imgStatus: 'IDLE' } : r))
+      );
+      showToast(`❌ Error al subir imagen: ${err.message || 'Intente nuevamente'}`);
+    }
   };
 
   // 6. Subir PDF Local
-  const handleSubirPdf = (id: string, file: File) => {
-    const reader = new FileReader();
-
+  const handleSubirPdf = async (id: string, file: File) => {
     setRecursosList((prev) =>
       prev.map((r) => (r.id === id ? { ...r, pdfStatus: 'UPLOADING' } : r))
     );
 
-    reader.onload = async (e) => {
-      const base64String = e.target?.result as string;
+    try {
+      const formData = new FormData();
+      formData.append('id', id);
+      formData.append('type', 'pdf');
+      formData.append('file', file);
 
+      const res = await fetch('/api/recursos/upload', {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await res.json();
+
+      if (data.success && data.data?.url) {
+        setRecursosList((prev) =>
+          prev.map((r) =>
+            r.id === id
+              ? { ...r, urlPdf: data.data.url, pdfStatus: 'SUCCESS' }
+              : r
+          )
+        );
+        showToast('✔ PDF subido y guardado exitosamente.');
+      } else {
+        throw new Error(data.error?.message || 'Error al subir PDF');
+      }
+    } catch (err: any) {
+      console.error('Error subiendo PDF:', err);
       setRecursosList((prev) =>
-        prev.map((r) =>
-          r.id === id
-            ? { ...r, urlPdf: base64String, pdfStatus: 'SUCCESS' }
-            : r
-        )
+        prev.map((r) => (r.id === id ? { ...r, pdfStatus: 'IDLE' } : r))
       );
-
-      await updateRecursoAction(id, { urlPdf: base64String });
-      showToast('✔ PDF guardado en PostgreSQL local.');
-    };
-
-    reader.readAsDataURL(file);
+      showToast(`❌ Error al subir PDF: ${err.message || 'Intente nuevamente'}`);
+    }
   };
 
-  // 7. Conmutar Visibilidad
-  const handleToggleOcultar = async (id: string, estadoActual: 'PUBLICADO' | 'OCULTO') => {
-    const nuevoEstado = estadoActual === 'PUBLICADO' ? 'OCULTO' : 'PUBLICADO';
-    setRecursosList((prev) => prev.map((r) => (r.id === id ? { ...r, estado: nuevoEstado } : r)));
-    await updateRecursoAction(id, { estado: nuevoEstado });
+  // 7. Guardar como Borrador (Oculto para Docentes)
+  const handleGuardarBorrador = async (id: string) => {
+    const target = recursosList.find((r) => r.id === id);
+    if (!target) return;
+
+    setRecursosList((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, estado: 'OCULTO' } : r))
+    );
+
+    await updateRecursoAction(id, {
+      titulo: target.title,
+      descripcion: target.description,
+      estado: 'OCULTO',
+    });
+
+    showToast('📁 Guardado como borrador (no visible para docentes).');
   };
 
-  // 8. Previsualizar PDF Local
-  const handlePrevisualizar = async (rec: RecursoCardItem) => {
-    if (!rec.urlPdf && rec.pdfStatus !== 'SUCCESS') {
-      showToast('⚠️ Sube un archivo PDF antes de previsualizar');
+  // 8. Subir / Publicar en Vivo (Visible para Docentes)
+  const handlePublicarRecurso = async (id: string) => {
+    const target = recursosList.find((r) => r.id === id);
+    if (!target) return;
+
+    setRecursosList((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, estado: 'PUBLICADO' } : r))
+    );
+
+    await updateRecursoAction(id, {
+      titulo: target.title,
+      descripcion: target.description,
+      estado: 'PUBLICADO',
+    });
+
+    if (!target.urlPdf) {
+      showToast('🚀 ¡Recurso publicado! Recuerda subir el archivo PDF cuando esté listo.');
+    } else {
+      showToast('🚀 ¡Recurso subido y publicado en vivo para los docentes!');
+    }
+  };
+
+  // 9. Previsualizar PDF Local
+  const handlePrevisualizar = (rec: RecursoCardItem) => {
+    if (!rec.urlPdf || rec.pdfStatus !== 'SUCCESS') {
+      showToast('⚠️ Este recurso no tiene ningún archivo PDF subido todavía');
       return;
     }
 
-    const res = await getRecursoSignedUrlAction(rec.urlPdf || rec.id);
-    if (res.success && res.data.signedUrl) {
-      window.open(res.data.signedUrl, '_blank');
-    } else {
-      showToast('⚠️ Sube un archivo PDF antes de previsualizar');
-    }
+    const streamUrl = `/api/pdf-stream?url=${encodeURIComponent(rec.urlPdf)}`;
+    window.open(streamUrl, '_blank');
   };
 
-  // 9. Eliminar recurso
+  // 10. Eliminar recurso
   const confirmDeleteRecurso = async () => {
     if (!deleteModal.id) return;
     const targetId = deleteModal.id;
@@ -226,10 +277,10 @@ export const RecursosAdminView: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-12 relative">
+    <div className="space-y-4 sm:space-y-6 max-w-7xl mx-auto pb-8 sm:pb-12 relative min-w-0">
       {/* Cabecera del Módulo */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-100 dark:border-slate-800 p-6 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div className="space-y-1">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-100 dark:border-slate-800 p-4 sm:p-6 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="space-y-1 min-w-0">
           <span className="text-[10px] font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
             GESTIÓN DE CONTENIDOS
           </span>
@@ -240,47 +291,49 @@ export const RecursosAdminView: React.FC = () => {
         </div>
 
         <button
-          type="button"
-          disabled={isSubmitting}
           onClick={handleAgregarRecurso}
-          className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl px-5 py-2.5 shadow-xs transition-colors shrink-0 cursor-pointer"
+          disabled={isSubmitting}
+          className="w-full sm:w-auto justify-center bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs px-5 py-3 rounded-xl transition-all shadow-md shadow-indigo-500/20 active:scale-95 flex items-center space-x-2 shrink-0 cursor-pointer disabled:opacity-50"
         >
-          {isSubmitting ? 'Cargando...' : '+ AGREGAR RECURSO'}
+          <span>+ AGREGAR RECURSO</span>
         </button>
       </div>
 
       {/* Banner Informativo */}
-      <div className="bg-purple-50/60 dark:bg-slate-800/60 border border-purple-100 dark:border-slate-700 text-gray-600 dark:text-slate-300 rounded-xl p-4 text-xs flex items-center space-x-2">
-        <span className="font-bold text-indigo-600">i</span>
-        <span>
+      <div className="bg-purple-50/50 dark:bg-purple-950/20 border border-purple-100 dark:border-purple-900/40 rounded-2xl p-4 flex items-start space-x-3">
+        <div className="w-2 h-2 rounded-full bg-purple-600 shrink-0" />
+        <p className="text-xs text-purple-900 dark:text-purple-300 font-medium">
           La imagen es opcional. Si no subes una, se mostrará una miniatura automática con el formato AVEND ESCALA.
-        </span>
+        </p>
       </div>
 
-      {/* Toast Flotante */}
+      {/* Toast Alert Flotante */}
       {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 bg-slate-900 text-white text-xs font-bold px-4 py-3 rounded-2xl shadow-xl border border-slate-700 animate-in fade-in flex items-center space-x-3">
-          <span>{toastMessage}</span>
-          <button onClick={() => setToastMessage(null)} className="text-slate-400 hover:text-white">
-            ✕
-          </button>
+        <div className="fixed bottom-4 left-4 right-4 sm:left-auto sm:right-6 sm:bottom-6 sm:max-w-md z-50 bg-slate-900 text-white px-5 py-3 rounded-2xl shadow-xl border border-slate-800 text-xs font-bold flex items-start gap-3 animate-in fade-in slide-in-from-bottom-4 duration-200">
+          <span className="break-words">{toastMessage}</span>
         </div>
       )}
 
-      {/* Grilla de Tarjetas */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      {/* Cuadrícula de Tarjetas de Recursos */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {recursosList.map((rec) => (
           <div
             key={rec.id}
-            className={`bg-white dark:bg-slate-900 rounded-2xl border border-gray-100 dark:border-slate-800 p-4 shadow-xs space-y-4 ${
-              rec.estado === 'OCULTO' ? 'opacity-60' : 'opacity-100'
+            className={`bg-white dark:bg-slate-900 rounded-2xl border p-5 space-y-4 shadow-sm transition-all duration-200 ${
+              rec.estado === 'OCULTO'
+                ? 'border-dashed border-amber-300 dark:border-amber-900/60 bg-amber-50/10'
+                : 'border-gray-100 dark:border-slate-800 hover:border-indigo-200 dark:hover:border-indigo-800/60'
             }`}
           >
-            {/* Renderizado Condicional de Cabecera con Fallback Seguro */}
+            {/* Cabecera con Miniatura e Indicador de Estado */}
             {rec.urlImagen && !rec.hasImageError ? (
               <div className="h-40 w-full overflow-hidden rounded-xl relative bg-slate-100 group">
                 <img
-                  src={rec.urlImagen}
+                  src={
+                    rec.urlImagen.startsWith('data:') || rec.urlImagen.startsWith('http')
+                      ? rec.urlImagen
+                      : `/api/pdf-stream?url=${encodeURIComponent(rec.urlImagen)}`
+                  }
                   alt={rec.title}
                   onError={() => handleImageError(rec.id)}
                   className="w-full h-full object-cover rounded-xl"
@@ -288,7 +341,18 @@ export const RecursosAdminView: React.FC = () => {
                 <span className="absolute top-3 left-4 text-[10px] font-black uppercase text-white bg-slate-900/60 backdrop-blur-xs px-2.5 py-1 rounded-full tracking-wider">
                   RECURSO {String(rec.number).padStart(2, '0')}
                 </span>
-                <label className="absolute top-3 right-3 bg-white/90 hover:bg-white text-slate-800 font-bold text-[10px] px-2.5 py-1 rounded-full cursor-pointer shadow-xs transition-all opacity-90 group-hover:opacity-100">
+
+                <span
+                  className={`absolute top-3 right-3 text-[9px] font-black uppercase px-2.5 py-0.5 rounded-full tracking-wider shadow-xs ${
+                    rec.estado === 'PUBLICADO'
+                      ? 'bg-emerald-500 text-white'
+                      : 'bg-amber-500 text-white'
+                  }`}
+                >
+                  {rec.estado === 'PUBLICADO' ? '🟢 EN VIVO' : '📝 BORRADOR'}
+                </span>
+
+                <label className="absolute bottom-3 right-3 bg-white/90 hover:bg-white text-slate-800 font-bold text-[10px] px-2.5 py-1 rounded-full cursor-pointer shadow-xs transition-all opacity-90 group-hover:opacity-100">
                   <span>Cambiar imagen</span>
                   <input
                     type="file"
@@ -305,6 +369,16 @@ export const RecursosAdminView: React.FC = () => {
               <div className={`h-40 rounded-xl relative p-4 flex items-center justify-center ${rec.bgHeader}`}>
                 <span className="absolute top-3 left-4 text-[10px] font-black uppercase text-white/90 tracking-wider">
                   RECURSO {String(rec.number).padStart(2, '0')}
+                </span>
+
+                <span
+                  className={`absolute top-3 right-3 text-[9px] font-black uppercase px-2.5 py-0.5 rounded-full tracking-wider shadow-xs ${
+                    rec.estado === 'PUBLICADO'
+                      ? 'bg-emerald-500 text-white'
+                      : 'bg-amber-500 text-white'
+                  }`}
+                >
+                  {rec.estado === 'PUBLICADO' ? '🟢 EN VIVO' : '📝 BORRADOR'}
                 </span>
 
                 <div className="bg-white/30 backdrop-blur-xs p-3.5 rounded-2xl text-white shadow-xs">
@@ -331,7 +405,7 @@ export const RecursosAdminView: React.FC = () => {
               />
             </div>
 
-            {/* Campo Descripción (Ubicación Exacta: Debajo de Título y antes de Subir Imagen/PDF) */}
+            {/* Campo Descripción */}
             <div>
               <label className="block text-xs font-bold text-gray-500 mb-1">Descripción</label>
               <textarea
@@ -344,7 +418,7 @@ export const RecursosAdminView: React.FC = () => {
               />
             </div>
 
-            {/* Botones Medios: SUBIR IMAGEN y SUBIR PDF */}
+            {/* Botones de Carga de Archivos: SUBIR IMAGEN y SUBIR PDF */}
             <div className="flex space-x-2">
               <label className="bg-gray-100 hover:bg-gray-200 dark:bg-slate-800 text-gray-700 dark:text-slate-300 font-bold text-xs rounded-xl py-2.5 px-3 w-1/2 text-center cursor-pointer transition-colors flex items-center justify-center">
                 <span>
@@ -385,34 +459,53 @@ export const RecursosAdminView: React.FC = () => {
               </label>
             </div>
 
-            {/* Botones Inferiores Adaptados para Todos los Tamaños (320px - 4K) */}
-            <div className="grid grid-cols-3 gap-1.5 pt-1">
-              <button
-                type="button"
-                onClick={() => handleToggleOcultar(rec.id, rec.estado)}
-                className={`font-bold text-[10px] sm:text-xs rounded-xl py-2 px-1 text-center transition-colors truncate ${
-                  rec.estado === 'PUBLICADO'
-                    ? 'bg-purple-50 text-indigo-700 hover:bg-purple-100 dark:bg-purple-950/60 dark:text-purple-300'
-                    : 'bg-gray-100 text-gray-500 hover:bg-gray-200 dark:bg-slate-800 dark:text-slate-400'
-                }`}
-              >
-                {rec.estado === 'PUBLICADO' ? 'OCULTAR' : 'MOSTRAR'}
-              </button>
-
+            {/* Fila Acciones Secundarias: Previsualizar y Eliminar */}
+            <div className="grid grid-cols-2 gap-2 pt-1">
               <button
                 type="button"
                 onClick={() => handlePrevisualizar(rec)}
-                className="bg-purple-50 text-indigo-700 dark:bg-purple-950/60 dark:text-purple-300 font-bold text-[10px] sm:text-xs rounded-xl py-2 px-1 text-center hover:bg-purple-100 transition-colors truncate"
+                className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs rounded-xl py-2 px-3 text-center transition-colors flex items-center justify-center space-x-1.5 cursor-pointer"
               >
-                PREVISUALIZAR
+                <span>👁️</span>
+                <span>Previsualizar</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => setDeleteModal({ isOpen: true, id: rec.id, title: rec.title })}
-                className="bg-rose-50 text-rose-600 dark:bg-rose-950/60 dark:text-rose-300 font-bold text-[10px] sm:text-xs rounded-xl py-2 px-1 text-center hover:bg-rose-100 transition-colors truncate"
+                className="bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/60 dark:hover:bg-rose-900/60 text-rose-600 dark:text-rose-300 font-bold text-xs rounded-xl py-2 px-3 text-center transition-colors flex items-center justify-center space-x-1.5 cursor-pointer"
               >
-                ELIMINAR
+                <span>🗑️</span>
+                <span>Eliminar</span>
+              </button>
+            </div>
+
+            {/* Fila Acciones Principales: BORRADOR y SUBIR */}
+            <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => handleGuardarBorrador(rec.id)}
+                className={`w-full py-2.5 px-3 rounded-xl font-extrabold text-xs transition-all flex items-center justify-center space-x-1.5 cursor-pointer ${
+                  rec.estado === 'OCULTO'
+                    ? 'bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700 shadow-xs'
+                    : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
+                }`}
+              >
+                <span>📝</span>
+                <span>{rec.estado === 'OCULTO' ? 'EN BORRADOR' : 'BORRADOR'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handlePublicarRecurso(rec.id)}
+                className={`w-full py-2.5 px-3 rounded-xl font-extrabold text-xs transition-all flex items-center justify-center space-x-1.5 cursor-pointer shadow-md ${
+                  rec.estado === 'PUBLICADO'
+                    ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20'
+                    : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-indigo-600/30 active:scale-98'
+                }`}
+              >
+                <span>🚀</span>
+                <span>{rec.estado === 'PUBLICADO' ? 'SUBIDO (EN VIVO)' : 'SUBIR'}</span>
               </button>
             </div>
           </div>
@@ -424,19 +517,19 @@ export const RecursosAdminView: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 animate-in fade-in">
           <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 max-w-sm w-full space-y-4 border border-gray-100 dark:border-slate-800 shadow-lg">
             <h3 className="font-extrabold text-sm text-slate-900 dark:text-white">¿Deseas eliminar este recurso?</h3>
-            <p className="text-xs text-slate-500">Se eliminará "{deleteModal.title}". Esta acción es irreversible.</p>
+            <p className="text-xs text-slate-500">Se eliminará "${deleteModal.title}". Esta acción es irreversible.</p>
             <div className="flex justify-end space-x-2 pt-2">
               <button
                 type="button"
                 onClick={() => setDeleteModal({ isOpen: false, id: null, title: null })}
-                className="px-3 py-1.5 rounded-xl border border-gray-200 text-xs font-bold text-gray-600 hover:bg-gray-50"
+                className="px-3 py-1.5 rounded-xl border border-gray-200 text-xs font-bold text-gray-600 hover:bg-gray-50 cursor-pointer"
               >
                 Cancelar
               </button>
               <button
                 type="button"
                 onClick={confirmDeleteRecurso}
-                className="px-4 py-1.5 rounded-xl bg-rose-600 text-white text-xs font-bold hover:bg-rose-700"
+                className="px-4 py-1.5 rounded-xl bg-rose-600 text-white text-xs font-bold hover:bg-rose-700 cursor-pointer"
               >
                 Sí, Eliminar
               </button>
