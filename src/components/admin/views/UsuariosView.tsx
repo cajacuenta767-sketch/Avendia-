@@ -5,6 +5,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { UserFormModal, UserFormData } from '@/components/admin/modals/UserFormModal';
 import { AdminUserFormModal } from '@/components/admin/modals/AdminUserFormModal';
 import { BulkUserImportModal } from '@/components/admin/modals/BulkUserImportModal';
+import { DocenteAuditoriaPanel, RegistradoresReportPanel } from '@/components/admin/views/RegistradoresPanels';
 import {
   getUsuariosAction,
   createUsuarioAction,
@@ -101,6 +102,8 @@ const calcEndDateExact = (
 interface UsuariosViewProps {
   /** REGISTRADOR: solo ve y gestiona los docentes que él registró (alcance aplicado en el servidor). */
   isRegistrador?: boolean;
+  /** Rol firmado por el servidor (/api/auth/session); decide qué herramientas se muestran. */
+  sessionRole?: string;
 }
 
 // Días restantes de la ventana de edición de 14 días del REGISTRADOR (0 = solo lectura).
@@ -110,7 +113,7 @@ function getRegistradorDiasRestantes(user: UsuarioDocenteItem): number {
   return remainingMs > 0 ? Math.ceil(remainingMs / (24 * 60 * 60 * 1000)) : 0;
 }
 
-export const UsuariosView: React.FC<UsuariosViewProps> = ({ isRegistrador = false }) => {
+export const UsuariosView: React.FC<UsuariosViewProps> = ({ isRegistrador = false, sessionRole = '' }) => {
   const [users, setUsers] = useState<UsuarioDocenteItem[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState('');
@@ -139,42 +142,17 @@ export const UsuariosView: React.FC<UsuariosViewProps> = ({ isRegistrador = fals
     return name && name.trim() ? name.trim() : 'Administrador';
   };
 
-  // Administrador actualmente conectado
-  const [adminUser, setAdminUser] = useState<{ name: string; email: string; role: string }>(() => {
-    if (typeof window !== 'undefined') {
-      const sessionStr = localStorage.getItem('admin_auth_session') || sessionStorage.getItem('admin_auth_session');
-      if (sessionStr) {
-        try {
-          const parsed = JSON.parse(sessionStr);
-          const emailLower = (parsed.email || '').toLowerCase();
-          const superList = ['cajacuenta767@gmail.com', 'avendoficial@gmail.com', 'avendocente@gmail.com', 'cajacuenta767', 'avendoficial', 'avendocente'];
-          const isSuper = superList.includes(emailLower) || (parsed.role || '').toUpperCase().includes('SUPER');
-          const finalName = resolveAdminName(parsed.name || parsed.usuario, emailLower);
-          return {
-            name: finalName,
-            email: emailLower,
-            role: isSuper ? 'SUPERADMINISTRADOR' : 'ADMINISTRADOR',
-          };
-        } catch {}
-      }
-    }
-    return {
-      name: 'Administrador',
-      email: '',
-      role: 'ADMINISTRADOR',
-    };
-  });
-
-  const superAdmins = ['cajacuenta767@gmail.com', 'avendocente@gmail.com', 'cajacuenta767', 'avendocente'];
-  const isSuperAdmin =
-    !isRegistrador &&
-    (superAdmins.includes((adminUser.email || '').toLowerCase()) ||
-      adminUser.role.toUpperCase().includes('SUPER'));
+  // Administrador actualmente conectado: el nombre es solo presentación (almacenamiento local);
+  // el rol proviene de la sesión firmada por el servidor.
+  const [storedAdmin, setStoredAdmin] = useState<{ name: string; email: string }>({ name: 'Administrador', email: '' });
+  const effectiveRole = isRegistrador ? 'REGISTRADOR' : (sessionRole || 'ADMINISTRADOR');
+  const adminUser = { ...storedAdmin, role: effectiveRole };
+  const isSuperAdmin = !isRegistrador && sessionRole === 'SUPERADMINISTRADOR';
 
   const [adminTeam, setAdminTeam] = useState<AdminUserItem[]>([]);
   const [isAdminFormModalOpen, setIsAdminFormModalOpen] = useState(false);
   const [adminToEdit, setAdminToEdit] = useState<AdminUserItem | null>(null);
-  const [activeSubTab, setActiveSubTab] = useState<'docentes' | 'admin_team'>('docentes');
+  const [activeSubTab, setActiveSubTab] = useState<'docentes' | 'admin_team' | 'registradores'>('docentes');
 
   const loadAdminTeam = async () => {
     const res = await getAdminUsersAction();
@@ -189,19 +167,7 @@ export const UsuariosView: React.FC<UsuariosViewProps> = ({ isRegistrador = fals
       try {
         const parsed = JSON.parse(sessionStr);
         const emailLower = (parsed.email || '').toLowerCase();
-        const isSuper = superAdmins.includes(emailLower) || (parsed.role || '').toUpperCase().includes('SUPER');
-        const finalName = resolveAdminName(parsed.name, emailLower);
-
-        if (parsed.name !== finalName) {
-          parsed.name = finalName;
-          localStorage.setItem('admin_auth_session', JSON.stringify(parsed));
-        }
-
-        setAdminUser({
-          name: finalName,
-          email: emailLower,
-          role: isSuper ? 'SUPERADMINISTRADOR' : 'ADMINISTRADOR',
-        });
+        setStoredAdmin({ name: resolveAdminName(parsed.name || parsed.usuario, emailLower), email: emailLower });
       } catch {}
     }
     if (!isRegistrador) loadAdminTeam();
@@ -986,7 +952,7 @@ export const UsuariosView: React.FC<UsuariosViewProps> = ({ isRegistrador = fals
 
         {/* Sub-pestañas Exclusivas para Superadministrador */}
         {isSuperAdmin && (
-          <div className="responsive-control-group bg-white dark:bg-slate-900 p-1.5 rounded-xl border border-gray-200 dark:border-slate-800 shadow-2xs w-full lg:w-auto lg:min-w-[290px]" style={{ '--responsive-control-columns': 2 } as React.CSSProperties}>
+          <div className="responsive-control-group bg-white dark:bg-slate-900 p-1.5 rounded-xl border border-gray-200 dark:border-slate-800 shadow-2xs w-full lg:w-auto lg:min-w-[290px]" style={{ '--responsive-control-columns': 3 } as React.CSSProperties}>
             <button
               type="button"
               onClick={() => setActiveSubTab('docentes')}
@@ -1008,6 +974,17 @@ export const UsuariosView: React.FC<UsuariosViewProps> = ({ isRegistrador = fals
               }`}
             >
               <span>🛡️ Equipo Admin ({filteredAdminTeam.length})</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveSubTab('registradores')}
+              className={`w-full px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                activeSubTab === 'registradores'
+                  ? 'bg-amber-600 text-white shadow-2xs'
+                  : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+              }`}
+            >
+              📈 Registradores
             </button>
           </div>
         )}
@@ -1117,6 +1094,7 @@ export const UsuariosView: React.FC<UsuariosViewProps> = ({ isRegistrador = fals
             </select>
           )}
 
+          {activeSubTab !== 'registradores' && (
           <button
             type="button"
             onClick={handleExportarExcel}
@@ -1124,6 +1102,7 @@ export const UsuariosView: React.FC<UsuariosViewProps> = ({ isRegistrador = fals
           >
             <span>📊 Exportar Excel</span>
           </button>
+          )}
         </div>
       </div>
 
@@ -1353,7 +1332,7 @@ export const UsuariosView: React.FC<UsuariosViewProps> = ({ isRegistrador = fals
               )}
             </tbody>
           </table>
-          ) : (
+          ) : activeSubTab === 'admin_team' ? (
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-purple-50/80 dark:bg-slate-800/60 border-b border-gray-200/80 dark:border-slate-800 text-[10px] font-black uppercase tracking-wider text-purple-900 dark:text-purple-300">
@@ -1495,6 +1474,8 @@ export const UsuariosView: React.FC<UsuariosViewProps> = ({ isRegistrador = fals
                 )}
               </tbody>
             </table>
+          ) : (
+            <RegistradoresReportPanel onToast={showToast} />
           )}
         </div>
 
@@ -2124,6 +2105,18 @@ export const UsuariosView: React.FC<UsuariosViewProps> = ({ isRegistrador = fals
                   </span>
                 </div>
               </div>
+
+              {!isRegistrador && (
+                <DocenteAuditoriaPanel
+                  key={detailModal.user.id}
+                  docenteId={detailModal.user.id}
+                  creadoPorAdminId={detailModal.user.creadoPorAdminId}
+                  isSuperAdmin={isSuperAdmin}
+                  registradores={adminTeam.filter((adm) => adm.rol === 'REGISTRADOR').map((adm) => ({ id: adm.id, nombre: adm.nombre }))}
+                  onChanged={loadUsers}
+                  onToast={showToast}
+                />
+              )}
             </div>
 
             {/* Pie Fijo de Cierre */}

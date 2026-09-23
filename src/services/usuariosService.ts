@@ -8,13 +8,18 @@ import { verifyAdminSession } from '@/services/adminService';
 import { sendOtpEmail } from '@/lib/email';
 import { buildDocenteAccessBadge, buildDocenteAccessBadges, condenseAccessBadges } from '@/utils/badgeUtils';
 import {
+  getRegistradorEditDeadline,
   isWithinRegistradorEditWindow,
   readServerSession,
-  REGISTRADOR_EDIT_WINDOW_MS,
+  REGISTRADOR_ROLE,
+  requireActiveAdminSession,
   requireUsuariosScope,
   setServerSession,
+  type SessionPayload,
   type UsuariosScope,
 } from '@/lib/serverSession';
+import { DAY_MS, SUPERADMIN_ROLE } from '@/lib/adminPolicy';
+import { randomInt } from 'crypto';
 import { z } from 'zod';
 import { generateDocentePin, normalizeDocentePin } from '@/lib/docentePin';
 import { USER_IMPORT_COLUMN_FIELDS } from '@/types/userImport';
@@ -85,6 +90,8 @@ export interface UsuarioDocenteItem {
   modificadoPor?: string;
   /** Solo para REGISTRADOR: fecha ISO hasta la que puede modificar a este docente. */
   editableHasta?: string;
+  /** Solo para administradores: AdminUser.id del registrador propietario (null = sin registrador). */
+  creadoPorAdminId?: string | null;
   fechaInicio: string;
   fechaFin: string;
   fechaModificacion?: string;
@@ -280,12 +287,75 @@ type ActionError = { code: string; message: string };
 
 const UNAUTHORIZED_ERROR: ActionError = { code: 'UNAUTHORIZED', message: 'Acceso denegado.' };
 
-function resolveUsuariosScope(): UsuariosScope | null {
+async function resolveUsuariosScope(): Promise<UsuariosScope | null> {
   try {
-    return requireUsuariosScope();
+    return await requireUsuariosScope();
   } catch {
     return null;
   }
+}
+
+type AuditoriaAccion =
+  | 'CREAR'
+  | 'EDITAR'
+  | 'PAUSAR'
+  | 'REACTIVAR'
+  | 'PIN'
+  | 'TIPO_ACCESO'
+  | 'EXTENDER'
+  | 'ELIMINAR'
+  | 'REASIGNAR'
+  | 'AMPLIAR_EDICION';
+
+type CambiosAuditoria = Record<string, { antes: unknown; despues: unknown }>;
+
+// El historial nunca debe bloquear la operación principal: los fallos solo se registran en el log.
+async function registrarAuditoria(
+  actor: SessionPayload | null,
+  docente: { id: string; email: string },
+  accion: AuditoriaAccion,
+  detalle?: CambiosAuditoria | Record<string, unknown>
+): Promise<void> {
+  if (!actor) return;
+  try {
+    await prisma.auditoriaDocente.create({
+      data: {
+        docenteId: docente.id,
+        docenteEmail: docente.email,
+        actorId: actor.sub,
+        actorEmail: actor.email,
+        actorRol: actor.role,
+        accion,
+        detalle: detalle ? JSON.stringify(detalle) : null,
+      },
+    });
+  } catch (error: unknown) {
+    console.error('❌ [AUDITORIA DOCENTE ERROR]:', error);
+  }
+}
+
+function formatAuditValue(value: unknown): unknown {
+  return value instanceof Date ? value.toISOString() : value;
+}
+
+function diffCampos(before: Record<string, unknown>, changes: Record<string, unknown>): CambiosAuditoria {
+  const result: CambiosAuditoria = {};
+  for (const [campo, despues] of Object.entries(changes)) {
+    if (despues === undefined) continue;
+    const antes = before[campo];
+    if (JSON.stringify(formatAuditValue(antes)) === JSON.stringify(formatAuditValue(despues))) continue;
+    // Los PIN no se guardan en claro en el historial.
+    result[campo] = campo === 'pin'
+      ? { antes: '••••', despues: '••••' }
+      : { antes: formatAuditValue(antes) ?? null, despues: formatAuditValue(despues) };
+  }
+  return result;
+}
+
+async function requireSuperadminSession(): Promise<SessionPayload> {
+  const session = await requireActiveAdminSession('usuarios');
+  if (session.role !== SUPERADMIN_ROLE) throw new Error('FORBIDDEN');
+  return session;
 }
 
 // Un REGISTRADOR solo puede modificar docentes que él creó y durante los primeros 14 días.
@@ -293,13 +363,13 @@ async function checkDocenteModifiable(scope: UsuariosScope, docenteId: string): 
   if (scope.scope === 'ALL') return null;
   const target = await prisma.usuarioDocente.findUnique({
     where: { id: docenteId },
-    select: { creadoPorAdminId: true, createdAt: true },
+    select: { creadoPorAdminId: true, createdAt: true, edicionHasta: true },
   });
   if (!target || target.creadoPorAdminId !== scope.adminId) {
     return { code: 'FORBIDDEN', message: 'No tienes permiso sobre este docente.' };
   }
-  if (!isWithinRegistradorEditWindow(target.createdAt)) {
-    return { code: 'EDIT_WINDOW_EXPIRED', message: 'Pasaron 14 días desde el registro de este docente; ya no puedes modificarlo.' };
+  if (!isWithinRegistradorEditWindow(target.createdAt, target.edicionHasta)) {
+    return { code: 'EDIT_WINDOW_EXPIRED', message: 'Terminó tu plazo de edición para este docente; ya no puedes modificarlo.' };
   }
   return null;
 }
@@ -317,7 +387,7 @@ export async function invalidateUsuariosCache() {
 
 export async function getUsuariosAction(): Promise<ActionResponse<UsuarioDocenteItem[]>> {
   try {
-    const scope = resolveUsuariosScope();
+    const scope = await resolveUsuariosScope();
     if (!scope) return { success: false, error: UNAUTHORIZED_ERROR };
     const isOwnScope = scope.scope === 'OWN';
     const now = Date.now();
@@ -379,7 +449,9 @@ export async function getUsuariosAction(): Promise<ActionResponse<UsuarioDocente
         fechaFin: formatDateTimePE(u.fechaFin),
         fechaModificacion: formatDateTimePE(u.updatedAt || u.fechaInicio),
         estado: new Date(u.fechaFin) < new Date() ? 'VENCIDO' : 'PREMIUM',
-        ...(isOwnScope && { editableHasta: new Date(u.createdAt.getTime() + REGISTRADOR_EDIT_WINDOW_MS).toISOString() }),
+        ...(isOwnScope
+          ? { editableHasta: getRegistradorEditDeadline(u.createdAt, u.edicionHasta).toISOString() }
+          : { creadoPorAdminId: u.creadoPorAdminId }),
       };
     });
 
@@ -438,7 +510,7 @@ export async function createUsuarioAction(data: {
   fechaFin?: string;
 }): Promise<ActionResponse<UsuarioDocenteItem>> {
   try {
-    const scope = resolveUsuariosScope();
+    const scope = await resolveUsuariosScope();
     if (!scope) return { success: false, error: UNAUTHORIZED_ERROR };
     const isOwnScope = scope.scope === 'OWN';
 
@@ -479,6 +551,35 @@ export async function createUsuarioAction(data: {
 
     const persistentPin = requestedPin || '';
 
+    // Si un registrador intenta dar de alta un correo existente, se avisa al Superadministrador
+    // sin revelar al registrador los datos del docente ya registrado.
+    if (isOwnScope) {
+      const existing = await prisma.usuarioDocente.findUnique({ where: { email: emailTrimmed }, select: { id: true } });
+      if (existing) {
+        try {
+          await prisma.notificacionAdmin.create({
+            data: {
+              tipo: 'SOLICITUD_REGISTRADOR',
+              titulo: `Solicitud de revisión: ${emailTrimmed}`,
+              mensaje: `El registrador ${adminResponsable} intentó registrar a ${emailTrimmed}, que ya existe en la plataforma. Revisa si corresponde reasignarlo.`,
+              tipoRecurso: 'USUARIO',
+              docenteNombre: finalNombre,
+              docenteEmail: emailTrimmed,
+            },
+          });
+        } catch (notifError: unknown) {
+          console.error('❌ [SOLICITUD REGISTRADOR ERROR]:', notifError);
+        }
+        return {
+          success: false,
+          error: {
+            code: 'DUPLICATE_USER',
+            message: 'Este correo ya está registrado. Se envió una solicitud de revisión al Superadministrador.',
+          },
+        };
+      }
+    }
+
     const isPrueba = (data.rol || '').toUpperCase().includes('PRUEBA') || (data.rol || '').toUpperCase().includes('24H') || (data.rol || '').toUpperCase().includes('TRIAL');
     const rolFinal = isPrueba ? 'PRUEBA_GRATIS_24H' : 'DOCENTE';
 
@@ -506,6 +607,12 @@ export async function createUsuarioAction(data: {
       },
     });
 
+    await registrarAuditoria(scope.session, created, 'CREAR', {
+      rol: created.rol,
+      fechaFin: created.fechaFin.toISOString(),
+      tiposAcceso: tiposAccesoArr,
+    });
+
     invalidateUsuariosCache();
     revalidatePath('/admin');
     return {
@@ -527,7 +634,7 @@ export async function createUsuarioAction(data: {
         fechaFin: formatDateTimePE(created.fechaFin),
         fechaModificacion: formatDateTimePE(created.updatedAt),
         estado: new Date(created.fechaFin) < new Date() ? 'VENCIDO' : 'PREMIUM',
-        ...(isOwnScope && { editableHasta: new Date(created.createdAt.getTime() + REGISTRADOR_EDIT_WINDOW_MS).toISOString() }),
+        ...(isOwnScope && { editableHasta: getRegistradorEditDeadline(created.createdAt, created.edicionHasta).toISOString() }),
       },
     };
   } catch (error: any) {
@@ -560,7 +667,7 @@ export async function toggleUserStatusAction(
   adminResponsable: string = 'Administrador'
 ): Promise<ActionResponse<{ id: string; nuevoEstado: 'PREMIUM' | 'VENCIDO' }>> {
   try {
-    const scope = resolveUsuariosScope();
+    const scope = await resolveUsuariosScope();
     if (!scope) return { success: false, error: UNAUTHORIZED_ERROR };
     const scopeError = await checkDocenteModifiable(scope, id);
     if (scopeError) return { success: false, error: scopeError };
@@ -602,6 +709,9 @@ export async function toggleUserStatusAction(
         modificadoPor: responsable,
       },
     });
+    await registrarAuditoria(scope.session, user, isCurrentlyActive ? 'PAUSAR' : 'REACTIVAR', {
+      fechaFin: { antes: user.fechaFin.toISOString(), despues: nuevaFechaFin.toISOString() },
+    });
 
     invalidateUsuariosCache();
     revalidatePath('/admin');
@@ -638,7 +748,7 @@ export async function updateUsuarioAction(
   }
 ): Promise<ActionResponse<{ id: string }>> {
   try {
-    const scope = resolveUsuariosScope();
+    const scope = await resolveUsuariosScope();
     if (!scope) return { success: false, error: UNAUTHORIZED_ERROR };
     const idResult = z.string().trim().min(1).safeParse(id);
     const dataResult = updateUsuarioSchema.safeParse(data);
@@ -708,10 +818,18 @@ export async function updateUsuarioAction(
       }
     }
 
+    const before = await prisma.usuarioDocente.findUnique({ where: { id: validId } });
+    if (!before) return { success: false, error: { code: 'NOT_FOUND', message: 'Usuario no encontrado.' } };
+
     await prisma.usuarioDocente.update({
       where: { id: validId },
       data: updatePayload,
     });
+    const { modificadoPor: _modificadoPor, ...camposAuditables } = updatePayload;
+    const cambios = diffCampos(before as unknown as Record<string, unknown>, camposAuditables as Record<string, unknown>);
+    if (Object.keys(cambios).length > 0) {
+      await registrarAuditoria(scope.session, before, 'EDITAR', cambios);
+    }
 
     invalidateUsuariosCache();
     revalidatePath('/admin');
@@ -732,7 +850,7 @@ export async function regenerateDocentePinAction(
   id: string
 ): Promise<ActionResponse<{ id: string; pin: string }>> {
   try {
-    const scope = resolveUsuariosScope();
+    const scope = await resolveUsuariosScope();
     if (!scope) {
       return { success: false, error: UNAUTHORIZED_ERROR };
     }
@@ -747,8 +865,9 @@ export async function regenerateDocentePinAction(
     const updated = await prisma.usuarioDocente.update({
       where: { id: idResult.data },
       data: { pin: generateDocentePin() },
-      select: { id: true, pin: true },
+      select: { id: true, pin: true, email: true },
     });
+    await registrarAuditoria(scope.session, updated, 'PIN');
 
     invalidateUsuariosCache();
     revalidatePath('/admin');
@@ -766,7 +885,9 @@ export async function deleteUsuarioAction(id: string): Promise<ActionResponse<{ 
     const isAdmin = await verifyAdminSession();
     if (!isAdmin) return { success: false, error: { code: 'UNAUTHORIZED', message: 'Acceso denegado.' } };
 
-    await prisma.usuarioDocente.delete({ where: { id } });
+    const deleted = await prisma.usuarioDocente.delete({ where: { id } });
+    await registrarAuditoria(readServerSession(), deleted, 'ELIMINAR', { nombre: deleted.nombre });
+    invalidateUsuariosCache();
     revalidatePath('/admin');
     return { success: true, data: { id } };
   } catch (error: any) {
@@ -806,6 +927,10 @@ export async function extenderLicenciaAction(
         rol: 'DOCENTE',
         modificadoPor: adminResponsable,
       },
+    });
+    await registrarAuditoria(readServerSession(), updated, 'EXTENDER', {
+      dias,
+      fechaFin: { antes: user.fechaFin.toISOString(), despues: nuevaFechaFin.toISOString() },
     });
 
     revalidatePath('/admin');
@@ -901,7 +1026,7 @@ export async function solicitarCodigoOtpAction(
       };
     }
 
-    const otpCode = Math.floor(1000 + Math.random() * 9000).toString();
+    const otpCode = randomInt(1000, 10000).toString();
     const expiresAt = Date.now() + 10 * 60 * 1000;
 
     otpStore.set(emailTerm, { code: otpCode, expiresAt });
@@ -2030,7 +2155,7 @@ export async function toggleDocenteTipoAccesoAction(
   tipo: 'Ascenso' | 'Nombramiento' | 'Directivo'
 ): Promise<ActionResponse<{ tiposAcceso: string[] }>> {
   try {
-    const scope = resolveUsuariosScope();
+    const scope = await resolveUsuariosScope();
     if (!scope) {
       return { success: false, error: UNAUTHORIZED_ERROR };
     }
@@ -2039,7 +2164,7 @@ export async function toggleDocenteTipoAccesoAction(
 
     const user = await prisma.usuarioDocente.findUnique({
       where: { id: userId },
-      select: { id: true, tiposAcceso: true, fechaInicio: true, fechaFin: true },
+      select: { id: true, email: true, tiposAcceso: true, fechaInicio: true, fechaFin: true },
     });
 
     if (!user) {
@@ -2081,6 +2206,9 @@ export async function toggleDocenteTipoAccesoAction(
     const updated = await prisma.usuarioDocente.update({
       where: { id: userId },
       data: updateData,
+    });
+    await registrarAuditoria(scope.session, user, 'TIPO_ACCESO', {
+      tiposAcceso: { antes: user.tiposAcceso ?? '[]', despues: JSON.stringify(currentAcc) },
     });
 
     invalidateUsuariosCache();
@@ -2214,5 +2342,218 @@ export async function importarDocentesDesdeExcelAction(
   } catch (error: any) {
     console.error('❌ [IMPORT EXCEL ERROR]:', error);
     return { success: false, error: { code: 'IMPORT_FAILED', message: error?.message || 'Error al importar Excel.' } };
+  }
+}
+
+// ─── SPEC-023: Herramientas del Superadministrador sobre registradores ───────────
+
+export interface AuditoriaDocenteItem {
+  id: string;
+  accion: string;
+  actorEmail: string;
+  actorRol: string;
+  detalle: string | null;
+  createdAt: string;
+}
+
+export interface ReporteRegistradorItem {
+  registradorId: string;
+  nombre: string;
+  email: string;
+  estado: string;
+  altasPeriodo: number;
+  totalDocentes: number;
+  activos: number;
+  vencidos: number;
+}
+
+const idSchema = z.string().trim().min(1).max(64);
+
+function authErrorFrom(error: unknown): ActionError {
+  return error instanceof Error && error.message === 'FORBIDDEN'
+    ? { code: 'FORBIDDEN', message: 'Solo el Superadministrador puede realizar esta acción.' }
+    : UNAUTHORIZED_ERROR;
+}
+
+export async function reasignarDocenteRegistradorAction(
+  docenteId: string,
+  registradorId: string | null
+): Promise<ActionResponse<{ id: string; creadoPorAdminId: string | null }>> {
+  let actor: SessionPayload;
+  try {
+    actor = await requireSuperadminSession();
+  } catch (error: unknown) {
+    return { success: false, error: authErrorFrom(error) };
+  }
+
+  try {
+    const idResult = idSchema.safeParse(docenteId);
+    const registradorResult = idSchema.nullable().safeParse(registradorId);
+    if (!idResult.success || !registradorResult.success) {
+      return { success: false, error: { code: 'INVALID_INPUT', message: 'Datos de reasignación inválidos.' } };
+    }
+
+    const docente = await prisma.usuarioDocente.findUnique({ where: { id: idResult.data } });
+    if (!docente) return { success: false, error: { code: 'NOT_FOUND', message: 'Usuario no encontrado.' } };
+
+    let registradorNombre: string | null = null;
+    if (registradorResult.data) {
+      const registrador = await prisma.adminUser.findUnique({
+        where: { id: registradorResult.data },
+        select: { rol: true, nombre: true },
+      });
+      if (!registrador || registrador.rol !== REGISTRADOR_ROLE) {
+        return { success: false, error: { code: 'INVALID_REGISTRADOR', message: 'La cuenta seleccionada no es un registrador.' } };
+      }
+      registradorNombre = registrador.nombre;
+    }
+
+    await prisma.usuarioDocente.update({
+      where: { id: docente.id },
+      data: {
+        creadoPorAdminId: registradorResult.data,
+        ...(registradorNombre && { creadoPor: registradorNombre }),
+      },
+    });
+    await registrarAuditoria(actor, docente, 'REASIGNAR', {
+      creadoPorAdminId: { antes: docente.creadoPorAdminId, despues: registradorResult.data },
+    });
+
+    invalidateUsuariosCache();
+    revalidatePath('/admin');
+    return { success: true, data: { id: docente.id, creadoPorAdminId: registradorResult.data } };
+  } catch (error: unknown) {
+    console.error('❌ [REASIGNAR DOCENTE ERROR]:', error);
+    return { success: false, error: { code: 'REASSIGN_FAILED', message: 'No se pudo reasignar el docente.' } };
+  }
+}
+
+export async function ampliarEdicionRegistradorAction(
+  docenteId: string,
+  dias: number
+): Promise<ActionResponse<{ id: string; edicionHasta: string }>> {
+  let actor: SessionPayload;
+  try {
+    actor = await requireSuperadminSession();
+  } catch (error: unknown) {
+    return { success: false, error: authErrorFrom(error) };
+  }
+
+  try {
+    const idResult = idSchema.safeParse(docenteId);
+    const diasResult = z.number().int().min(1).max(30).safeParse(dias);
+    if (!idResult.success || !diasResult.success) {
+      return { success: false, error: { code: 'INVALID_INPUT', message: 'Indica entre 1 y 30 días.' } };
+    }
+
+    const docente = await prisma.usuarioDocente.findUnique({ where: { id: idResult.data } });
+    if (!docente) return { success: false, error: { code: 'NOT_FOUND', message: 'Usuario no encontrado.' } };
+
+    // Se amplía desde el plazo vigente o, si ya venció, desde hoy.
+    const plazoActual = getRegistradorEditDeadline(docente.createdAt, docente.edicionHasta);
+    const base = plazoActual > new Date() ? plazoActual : new Date();
+    const edicionHasta = new Date(base.getTime() + diasResult.data * DAY_MS);
+
+    await prisma.usuarioDocente.update({ where: { id: docente.id }, data: { edicionHasta } });
+    await registrarAuditoria(actor, docente, 'AMPLIAR_EDICION', {
+      edicionHasta: { antes: plazoActual.toISOString(), despues: edicionHasta.toISOString() },
+    });
+
+    invalidateUsuariosCache();
+    revalidatePath('/admin');
+    return { success: true, data: { id: docente.id, edicionHasta: edicionHasta.toISOString() } };
+  } catch (error: unknown) {
+    console.error('❌ [AMPLIAR EDICION ERROR]:', error);
+    return { success: false, error: { code: 'EXTEND_WINDOW_FAILED', message: 'No se pudo ampliar el plazo de edición.' } };
+  }
+}
+
+export async function getAuditoriaDocenteAction(
+  docenteId: string
+): Promise<ActionResponse<AuditoriaDocenteItem[]>> {
+  try {
+    await requireActiveAdminSession('usuarios');
+  } catch (error: unknown) {
+    return { success: false, error: authErrorFrom(error) };
+  }
+
+  try {
+    const idResult = idSchema.safeParse(docenteId);
+    if (!idResult.success) return { success: false, error: { code: 'INVALID_INPUT', message: 'Usuario inválido.' } };
+
+    const rows = await prisma.auditoriaDocente.findMany({
+      where: { docenteId: idResult.data },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
+    return {
+      success: true,
+      data: rows.map((row) => ({
+        id: row.id,
+        accion: row.accion,
+        actorEmail: row.actorEmail,
+        actorRol: row.actorRol,
+        detalle: row.detalle,
+        createdAt: row.createdAt.toISOString(),
+      })),
+    };
+  } catch (error: unknown) {
+    console.error('❌ [AUDITORIA DOCENTE READ ERROR]:', error);
+    return { success: false, error: { code: 'AUDIT_READ_FAILED', message: 'No se pudo cargar el historial.' } };
+  }
+}
+
+export async function getReporteRegistradoresAction(
+  desde?: string,
+  hasta?: string
+): Promise<ActionResponse<ReporteRegistradorItem[]>> {
+  try {
+    await requireActiveAdminSession('usuarios');
+  } catch (error: unknown) {
+    return { success: false, error: authErrorFrom(error) };
+  }
+
+  try {
+    const desdeResult = isoDateSchema.optional().safeParse(desde || undefined);
+    const hastaResult = isoDateSchema.optional().safeParse(hasta || undefined);
+    if (!desdeResult.success || !hastaResult.success) {
+      return { success: false, error: { code: 'INVALID_DATES', message: 'Rango de fechas inválido.' } };
+    }
+    const desdeDate = desdeResult.data ? new Date(`${desdeResult.data}T00:00:00-05:00`) : null;
+    const hastaDate = hastaResult.data ? new Date(`${hastaResult.data}T23:59:59.999-05:00`) : null;
+
+    const registradores = await prisma.adminUser.findMany({
+      where: { rol: REGISTRADOR_ROLE },
+      select: { id: true, nombre: true, email: true, estado: true },
+      orderBy: { nombre: 'asc' },
+    });
+    const docentes = await prisma.usuarioDocente.findMany({
+      where: { creadoPorAdminId: { in: registradores.map((r) => r.id) } },
+      select: { creadoPorAdminId: true, createdAt: true, fechaFin: true, accesoGranted: true },
+    });
+
+    const now = new Date();
+    const report = registradores.map((registrador): ReporteRegistradorItem => {
+      const propios = docentes.filter((d) => d.creadoPorAdminId === registrador.id);
+      const activos = propios.filter((d) => d.fechaFin > now && d.accesoGranted !== false).length;
+      const altasPeriodo = propios.filter(
+        (d) => (!desdeDate || d.createdAt >= desdeDate) && (!hastaDate || d.createdAt <= hastaDate)
+      ).length;
+      return {
+        registradorId: registrador.id,
+        nombre: registrador.nombre,
+        email: registrador.email,
+        estado: registrador.estado,
+        altasPeriodo,
+        totalDocentes: propios.length,
+        activos,
+        vencidos: propios.length - activos,
+      };
+    });
+
+    return { success: true, data: report };
+  } catch (error: unknown) {
+    console.error('❌ [REPORTE REGISTRADORES ERROR]:', error);
+    return { success: false, error: { code: 'REPORT_FAILED', message: 'No se pudo generar el reporte.' } };
   }
 }

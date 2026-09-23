@@ -11,9 +11,17 @@ interface AdminSidebarProps {
   onLogout?: () => void;
   /** El REGISTRADOR solo ve el módulo de docentes. */
   isRegistrador?: boolean;
+  /** Rol y permisos firmados por el servidor (/api/auth/session). */
+  role: string;
+  permissions: {
+    permisoUsuarios: boolean;
+    permisoCuadernillos: boolean;
+    permisoRecursos: boolean;
+    permisoMetricas: boolean;
+  };
 }
 
-export const AdminSidebar: React.FC<AdminSidebarProps> = ({ activeTab, onTabChange, onLogout, isRegistrador = false }) => {
+export const AdminSidebar: React.FC<AdminSidebarProps> = ({ activeTab, onTabChange, onLogout, isRegistrador = false, role, permissions }) => {
   const resolveAdminName = (parsed: any): string => {
     const email = (parsed?.email || '').toLowerCase();
     if (email === 'cajacuenta767@gmail.com' || email === 'cajacuenta767') {
@@ -22,88 +30,27 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ activeTab, onTabChan
     return parsed?.name || parsed?.usuario || 'Administrador';
   };
 
-  const [adminUser, setAdminUser] = useState<{ name: string; email: string; role: string }>(() => {
-    if (typeof window !== 'undefined') {
+  // El nombre visible sale del almacenamiento local (solo presentación); el rol y los
+  // permisos llegan como props desde la sesión firmada por el servidor.
+  const readStoredAdmin = (): { name: string; email: string } => {
+    if (typeof window === 'undefined') return { name: 'Administrador', email: '' };
+    try {
       const sessionStr = localStorage.getItem('admin_auth_session') || sessionStorage.getItem('admin_auth_session');
-      if (sessionStr) {
-        try {
-          const parsed = JSON.parse(sessionStr);
-          const email = (parsed.email || '').toLowerCase();
-          const superList = ['cajacuenta767@gmail.com', 'avendoficial@gmail.com', 'avendocente@gmail.com', 'cajacuenta767', 'avendoficial', 'avendocente'];
-          const isSuper = superList.includes(email);
-          const finalName = resolveAdminName(parsed);
-
-          // Si el nombre guardado era el antiguo, actualizar el storage
-          if (parsed.name !== finalName) {
-            parsed.name = finalName;
-            localStorage.setItem('admin_auth_session', JSON.stringify(parsed));
-          }
-
-          return {
-            name: finalName,
-            email: parsed.email || '',
-            role: isSuper ? 'SUPERADMINISTRADOR' : (parsed.role || 'ADMINISTRADOR'),
-          };
-        } catch {}
-      }
+      if (!sessionStr) return { name: 'Administrador', email: '' };
+      const parsed = JSON.parse(sessionStr);
+      return { name: resolveAdminName(parsed), email: parsed.email || '' };
+    } catch {
+      return { name: 'Administrador', email: '' };
     }
-    return {
-      name: 'Administrador',
-      email: '',
-      role: 'ADMINISTRADOR',
-    };
-  });
+  };
+
+  const [storedAdmin, setStoredAdmin] = useState<{ name: string; email: string }>(readStoredAdmin);
+  const adminUser = { ...storedAdmin, role: role || 'ADMINISTRADOR' };
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  const [permissions, setPermissions] = useState({
-    permisoUsuarios: true,
-    permisoCuadernillos: true,
-    permisoRecursos: true,
-    permisoMetricas: true,
-  });
-
   useEffect(() => {
-    const updateSession = () => {
-      const sessionStr = localStorage.getItem('admin_auth_session') || sessionStorage.getItem('admin_auth_session');
-      if (sessionStr) {
-        try {
-          const parsed = JSON.parse(sessionStr);
-          const email = (parsed.email || '').toLowerCase();
-          const superList = ['cajacuenta767@gmail.com', 'avendocente@gmail.com', 'cajacuenta767', 'avendocente'];
-          const isSuper = superList.includes(email);
-          const finalName = resolveAdminName(parsed);
-
-          if (parsed.name !== finalName) {
-            parsed.name = finalName;
-            localStorage.setItem('admin_auth_session', JSON.stringify(parsed));
-          }
-
-          setAdminUser({
-            name: finalName,
-            email: parsed.email || '',
-            role: isSuper ? 'SUPERADMINISTRADOR' : (parsed.role || 'ADMINISTRADOR'),
-          });
-          if (isSuper) {
-            setPermissions({
-              permisoUsuarios: true,
-              permisoCuadernillos: true,
-              permisoRecursos: true,
-              permisoMetricas: true,
-            });
-          } else {
-            setPermissions({
-              permisoUsuarios: parsed.permisoUsuarios ?? true,
-              permisoCuadernillos: parsed.permisoCuadernillos ?? true,
-              permisoRecursos: parsed.permisoRecursos ?? true,
-              permisoMetricas: parsed.permisoMetricas ?? true,
-            });
-          }
-        } catch {}
-      }
-    };
-
-    updateSession();
+    const updateSession = () => setStoredAdmin(readStoredAdmin());
     window.addEventListener('admin_session_change', updateSession);
     return () => window.removeEventListener('admin_session_change', updateSession);
   }, []);

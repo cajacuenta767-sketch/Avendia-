@@ -1,14 +1,27 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { cookies } from 'next/headers';
+import { prisma } from '@/lib/prisma';
+import {
+  ADMIN_SESSION_TTL_SECONDS,
+  hasAdminRole,
+  isPanelRole,
+  REGISTRADOR_ROLE,
+  SUPERADMIN_ROLE,
+} from '@/lib/adminPolicy';
+
+export {
+  REGISTRADOR_ROLE,
+  REGISTRADOR_EDIT_WINDOW_MS,
+  getRegistradorEditDeadline,
+  isWithinRegistradorEditWindow,
+} from '@/lib/adminPolicy';
 
 const SESSION_COOKIE = 'avend_session';
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 3650;
 const sessionSecret = process.env.SESSION_SECRET;
-const ADMIN_ROLES = ['ADMIN', 'ADMINISTRADOR', 'SUPERADMINISTRADOR', 'GESTOR_LICENCIAS'] as const;
 
-function hasAdminRole(role: string): boolean {
-  return ADMIN_ROLES.includes(role as (typeof ADMIN_ROLES)[number]);
-}
+// Cuentas oficiales definidas por variables de entorno (no existen en admin_users).
+const OFFICIAL_ADMIN_SUBS = new Set(['official-admin', 'admin-super-bryan', 'admin-super-avendoficial']);
 
 export type SessionPayload = {
   sub: string;
@@ -17,9 +30,6 @@ export type SessionPayload = {
   exp: number;
   permissions?: Record<string, boolean>;
 };
-
-export const REGISTRADOR_ROLE = 'REGISTRADOR';
-export const REGISTRADOR_EDIT_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
 
 export type UsuariosScope =
   | { scope: 'ALL'; session: SessionPayload }
@@ -38,7 +48,7 @@ function readLegacySession(): SessionPayload | null {
       const parsed = JSON.parse(decodeURIComponent(legacy)) as { id?: string; email?: string; nombre?: string; rol?: string; role?: string; isAdmin?: boolean };
       if (!parsed.id && !parsed.email) continue;
       const claimedRole = (parsed.role || parsed.rol || 'DOCENTE').toUpperCase();
-      const role = hasAdminRole(claimedRole) || claimedRole === REGISTRADOR_ROLE ? 'DOCENTE' : claimedRole;
+      const role = isPanelRole(claimedRole) ? 'DOCENTE' : claimedRole;
       return { sub: parsed.id || parsed.email || 'legacy-session', email: parsed.email || '', role, exp: Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS };
     } catch {
       continue;
@@ -55,8 +65,13 @@ function sign(value: string): string {
   return createHmac('sha256', sessionSecret).update(value).digest('base64url');
 }
 
+// Las sesiones de panel (administradores y registradores) expiran a las 12 horas.
+function getSessionTtlSeconds(role: string): number {
+  return isPanelRole(role) ? ADMIN_SESSION_TTL_SECONDS : SESSION_TTL_SECONDS;
+}
+
 export function createServerSession(payload: Omit<SessionPayload, 'exp'>): string {
-  const body = Buffer.from(JSON.stringify({ ...payload, exp: Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS })).toString('base64url');
+  const body = Buffer.from(JSON.stringify({ ...payload, exp: Math.floor(Date.now() / 1000) + getSessionTtlSeconds(payload.role) })).toString('base64url');
   return `${body}.${sign(body)}`;
 }
 
@@ -69,7 +84,10 @@ export function readServerSession(): SessionPayload | null {
   try {
     if (!timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) return null;
     const payload = JSON.parse(Buffer.from(body, 'base64url').toString('utf8')) as SessionPayload;
-    return payload.exp > Math.floor(Date.now() / 1000) ? payload : null;
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    // Las sesiones de panel emitidas con la duración antigua (10 años) dejan de ser válidas.
+    if (isPanelRole(payload.role) && payload.exp - nowSeconds > ADMIN_SESSION_TTL_SECONDS) return null;
+    return payload.exp > nowSeconds ? payload : null;
   } catch {
     return null;
   }
@@ -85,7 +103,7 @@ export function setServerSession(payload: Omit<SessionPayload, 'exp'>): void {
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
     path: '/',
-    maxAge: SESSION_TTL_SECONDS,
+    maxAge: getSessionTtlSeconds(payload.role),
   });
 }
 
@@ -93,6 +111,22 @@ export function clearServerSession(): void {
   cookies().set(SESSION_COOKIE, '', { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', path: '/', maxAge: 0 });
 }
 
+/**
+ * Una sesión de panel solo es válida mientras su cuenta siga ACTIVA y conserve el mismo rol:
+ * pausar, eliminar o cambiar de rol a un administrador revoca su sesión de inmediato.
+ */
+export async function isPanelAccountActive(session: SessionPayload): Promise<boolean> {
+  if (!isPanelRole(session.role)) return true;
+  if (session.role === SUPERADMIN_ROLE && OFFICIAL_ADMIN_SUBS.has(session.sub)) return true;
+  try {
+    const account = await prisma.adminUser.findUnique({ where: { id: session.sub }, select: { estado: true, rol: true } });
+    return Boolean(account && account.estado === 'ACTIVO' && account.rol === session.role);
+  } catch {
+    return false;
+  }
+}
+
+/** Solo valida la firma y el rol. Para mutaciones usar requireActiveAdminSession. */
 export function requireAdminSession(permission?: string): SessionPayload {
   // Las mutaciones administrativas nunca deben aceptar la cookie legacy del
   // navegador: solo la sesión firmada y HTTP-only emitida por el servidor.
@@ -100,8 +134,16 @@ export function requireAdminSession(permission?: string): SessionPayload {
   if (!session || !hasAdminRole(session.role)) {
     throw new Error('UNAUTHORIZED');
   }
-  if (permission && session.role !== 'SUPERADMINISTRADOR' && session.permissions?.[permission] === false) {
+  if (permission && session.role !== SUPERADMIN_ROLE && session.permissions?.[permission] === false) {
     throw new Error('FORBIDDEN');
+  }
+  return session;
+}
+
+export async function requireActiveAdminSession(permission?: string): Promise<SessionPayload> {
+  const session = requireAdminSession(permission);
+  if (!(await isPanelAccountActive(session))) {
+    throw new Error('UNAUTHORIZED');
   }
   return session;
 }
@@ -111,16 +153,12 @@ export function requireAdminSession(permission?: string): SessionPayload {
  * solo a los docentes que él mismo creó. REGISTRADOR no forma parte de ADMIN_ROLES,
  * por lo que no supera requireAdminSession ni el resto de módulos administrativos.
  */
-export function requireUsuariosScope(): UsuariosScope {
+export async function requireUsuariosScope(): Promise<UsuariosScope> {
   const session = readServerSession();
-  if (!session) throw new Error('UNAUTHORIZED');
-  if (session.role === REGISTRADOR_ROLE && session.sub) {
+  if (!session || !isPanelRole(session.role)) throw new Error('UNAUTHORIZED');
+  if (!(await isPanelAccountActive(session))) throw new Error('UNAUTHORIZED');
+  if (session.role === REGISTRADOR_ROLE) {
     return { scope: 'OWN', adminId: session.sub, session };
   }
-  if (!hasAdminRole(session.role)) throw new Error('UNAUTHORIZED');
   return { scope: 'ALL', session };
-}
-
-export function isWithinRegistradorEditWindow(createdAt: Date, now: Date = new Date()): boolean {
-  return now.getTime() - createdAt.getTime() < REGISTRADOR_EDIT_WINDOW_MS;
 }
