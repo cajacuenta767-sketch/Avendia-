@@ -228,6 +228,11 @@ export const AdminUserFormModal: React.FC<AdminUserFormModalProps> = ({
                     setPermisoCuadernillos(true);
                     setPermisoRecursos(true);
                     setPermisoMetricas(true);
+                  } else if (selectedRole === 'REGISTRADOR') {
+                    setPermisoUsuarios(true);
+                    setPermisoCuadernillos(false);
+                    setPermisoRecursos(false);
+                    setPermisoMetricas(false);
                   } else if (selectedRole === 'GESTOR_LICENCIAS') {
                     setPermisoUsuarios(true);
                     setPermisoCuadernillos(false);
@@ -255,6 +260,7 @@ export const AdminUserFormModal: React.FC<AdminUserFormModalProps> = ({
                 <option value="ADMINISTRADOR">ADMINISTRADOR (GESTOR GENERAL)</option>
                 <option value="SUPERADMINISTRADOR">SUPERADMINISTRADOR (ACCESO TOTAL Y EQUIPO)</option>
                 <option value="GESTOR_LICENCIAS">GESTOR DE LICENCIAS (USUARIOS Y SUSCRIPCIONES)</option>
+                <option value="REGISTRADOR">REGISTRADOR (SOLO AGREGA SUS DOCENTES · EDICIÓN 14 DÍAS)</option>
                 <option value="GESTOR_CUADERNILLOS">GESTOR DE CUADERNILLOS (ESPECIALISTA MINEDU)</option>
                 <option value="GESTOR_RECURSOS">GESTOR DE RECURSOS (MATERIALES Y DIDÁCTICA)</option>
                 <option value="AUDITOR_SAAS">AUDITOR Y ANALISTA SAAS (MÉTRICAS E INDICADORES)</option>

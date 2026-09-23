@@ -11,7 +11,7 @@ export type ActionResponse<T> =
   | { success: false; error: { code: string; message: string } };
 
 import { OFFICIAL_ADMIN_ACCOUNTS, AdminAccount } from '@/data/adminAccounts';
-import { requireAdminSession, setServerSession } from '@/lib/serverSession';
+import { REGISTRADOR_ROLE, requireAdminSession, setServerSession } from '@/lib/serverSession';
 import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 
 function hashSecret(value: string): string {
@@ -29,6 +29,39 @@ function verifySecret(value: string, stored: string): boolean {
 }
 
 export type { AdminAccount };
+
+// Solo el Superadministrador puede crear, editar o convertir cuentas REGISTRADOR.
+async function checkAdminRoleAssignment(
+  actorRole: string,
+  requestedRole: string | undefined,
+  targetId?: string
+): Promise<string | null> {
+  if (actorRole === 'SUPERADMINISTRADOR') return null;
+  if (requestedRole === REGISTRADOR_ROLE) return 'Solo el Superadministrador puede gestionar registradores.';
+  if (targetId) {
+    const target = await prisma.adminUser.findUnique({ where: { id: targetId }, select: { rol: true } });
+    if (target?.rol === REGISTRADOR_ROLE) return 'Solo el Superadministrador puede gestionar registradores.';
+  }
+  return null;
+}
+
+function resolveAdminPermissions(dbAdmin: {
+  rol: string;
+  permisoUsuarios: boolean;
+  permisoCuadernillos: boolean;
+  permisoRecursos: boolean;
+  permisoMetricas: boolean;
+}) {
+  if (dbAdmin.rol === REGISTRADOR_ROLE) {
+    return { usuarios: true, cuadernillos: false, recursos: false, metricas: false };
+  }
+  return {
+    usuarios: dbAdmin.permisoUsuarios,
+    cuadernillos: dbAdmin.permisoCuadernillos,
+    recursos: dbAdmin.permisoRecursos,
+    metricas: dbAdmin.permisoMetricas,
+  };
+}
 
 export interface AdminUserItem {
   id: string;
@@ -145,7 +178,9 @@ export async function createAdminUserAction(data: {
   creadoPor?: string;
 }): Promise<ActionResponse<{ id: string }>> {
   try {
-    requireAdminSession('usuarios');
+    const actor = requireAdminSession('usuarios');
+    const roleError = await checkAdminRoleAssignment(actor.role, data.rol);
+    if (roleError) return { success: false, error: { code: 'FORBIDDEN', message: roleError } };
     const cleanNombre = (data.nombre || '').trim();
     const cleanEmail = (data.email || '').trim().toLowerCase();
     const cleanUsuario = (data.usuario || '').trim().toLowerCase();
@@ -163,10 +198,10 @@ export async function createAdminUserAction(data: {
         password: hashSecret(cleanPassword),
         rol: data.rol || 'ADMINISTRADOR',
         estado: 'ACTIVO',
-        permisoUsuarios: Boolean(data.permisoUsuarios ?? true),
-        permisoCuadernillos: Boolean(data.permisoCuadernillos ?? true),
-        permisoRecursos: Boolean(data.permisoRecursos ?? true),
-        permisoMetricas: Boolean(data.permisoMetricas ?? true),
+        permisoUsuarios: data.rol === REGISTRADOR_ROLE ? true : Boolean(data.permisoUsuarios ?? true),
+        permisoCuadernillos: data.rol === REGISTRADOR_ROLE ? false : Boolean(data.permisoCuadernillos ?? true),
+        permisoRecursos: data.rol === REGISTRADOR_ROLE ? false : Boolean(data.permisoRecursos ?? true),
+        permisoMetricas: data.rol === REGISTRADOR_ROLE ? false : Boolean(data.permisoMetricas ?? true),
         creadoPor: data.creadoPor || 'Superadministrador AVEND',
         modificadoPor: data.creadoPor || 'Superadministrador AVEND',
       },
@@ -199,7 +234,9 @@ export async function updateAdminUserAction(
   }
 ): Promise<ActionResponse<{ id: string }>> {
   try {
-    requireAdminSession('usuarios');
+    const actor = requireAdminSession('usuarios');
+    const roleError = await checkAdminRoleAssignment(actor.role, data.rol, id);
+    if (roleError) return { success: false, error: { code: 'FORBIDDEN', message: roleError } };
     const updated = await prisma.adminUser.update({
       where: { id },
       data: {
@@ -229,7 +266,9 @@ export async function updateAdminUserAction(
  */
 export async function deleteAdminUserAction(id: string): Promise<ActionResponse<{ id: string }>> {
   try {
-    requireAdminSession('usuarios');
+    const actor = requireAdminSession('usuarios');
+    const roleError = await checkAdminRoleAssignment(actor.role, undefined, id);
+    if (roleError) return { success: false, error: { code: 'FORBIDDEN', message: roleError } };
     await prisma.adminUser.delete({ where: { id } });
     return { success: true, data: { id } };
   } catch (error: any) {
@@ -271,7 +310,8 @@ export async function verifyAdminCredentialsAction(
         if (!dbAdmin.password.startsWith('scrypt$')) {
           await prisma.adminUser.update({ where: { id: dbAdmin.id }, data: { password: hashSecret(cleanPass) } });
         }
-        setServerSession({ sub: dbAdmin.id, email: dbAdmin.email, role: dbAdmin.rol, permissions: { usuarios: dbAdmin.permisoUsuarios, cuadernillos: dbAdmin.permisoCuadernillos, recursos: dbAdmin.permisoRecursos, metricas: dbAdmin.permisoMetricas } });
+        const permissions = resolveAdminPermissions(dbAdmin);
+        setServerSession({ sub: dbAdmin.id, email: dbAdmin.email, role: dbAdmin.rol, permissions });
         return {
           success: true,
           data: {
@@ -279,10 +319,10 @@ export async function verifyAdminCredentialsAction(
             name: dbAdmin.nombre,
             email: dbAdmin.email,
             role: dbAdmin.rol,
-            permisoUsuarios: dbAdmin.permisoUsuarios ?? true,
-            permisoCuadernillos: dbAdmin.permisoCuadernillos ?? true,
-            permisoRecursos: dbAdmin.permisoRecursos ?? true,
-            permisoMetricas: dbAdmin.permisoMetricas ?? true,
+            permisoUsuarios: permissions.usuarios,
+            permisoCuadernillos: permissions.cuadernillos,
+            permisoRecursos: permissions.recursos,
+            permisoMetricas: permissions.metricas,
           },
         };
       }

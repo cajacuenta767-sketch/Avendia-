@@ -18,6 +18,14 @@ export type SessionPayload = {
   permissions?: Record<string, boolean>;
 };
 
+export const REGISTRADOR_ROLE = 'REGISTRADOR';
+export const REGISTRADOR_EDIT_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
+
+export type UsuariosScope =
+  | { scope: 'ALL'; session: SessionPayload }
+  | { scope: 'OWN'; adminId: string; session: SessionPayload };
+
+// Las cookies legacy no están firmadas: nunca pueden otorgar un rol administrativo.
 function readLegacySession(): SessionPayload | null {
   const legacyCookies = [
     cookies().get('admin_auth_session')?.value,
@@ -29,7 +37,8 @@ function readLegacySession(): SessionPayload | null {
     try {
       const parsed = JSON.parse(decodeURIComponent(legacy)) as { id?: string; email?: string; nombre?: string; rol?: string; role?: string; isAdmin?: boolean };
       if (!parsed.id && !parsed.email) continue;
-      const role = parsed.role || (parsed.isAdmin ? 'ADMINISTRADOR' : parsed.rol || 'DOCENTE');
+      const claimedRole = (parsed.role || parsed.rol || 'DOCENTE').toUpperCase();
+      const role = hasAdminRole(claimedRole) || claimedRole === REGISTRADOR_ROLE ? 'DOCENTE' : claimedRole;
       return { sub: parsed.id || parsed.email || 'legacy-session', email: parsed.email || '', role, exp: Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS };
     } catch {
       continue;
@@ -67,16 +76,7 @@ export function readServerSession(): SessionPayload | null {
 }
 
 export function readAnySession(): SessionPayload | null {
-  const serverSession = readServerSession();
-  const legacySession = readLegacySession();
-
-  // Al volver de "Ver como docente", puede quedar una sesión docente firmada
-  // mientras el navegador conserva una sesión administrativa válida.
-  if (legacySession && hasAdminRole(legacySession.role) && (!serverSession || !hasAdminRole(serverSession.role))) {
-    return legacySession;
-  }
-
-  return serverSession || legacySession;
+  return readServerSession() || readLegacySession();
 }
 
 export function setServerSession(payload: Omit<SessionPayload, 'exp'>): void {
@@ -104,4 +104,23 @@ export function requireAdminSession(permission?: string): SessionPayload {
     throw new Error('FORBIDDEN');
   }
   return session;
+}
+
+/**
+ * Alcance de gestión de docentes: los administradores ven a todos; un REGISTRADOR
+ * solo a los docentes que él mismo creó. REGISTRADOR no forma parte de ADMIN_ROLES,
+ * por lo que no supera requireAdminSession ni el resto de módulos administrativos.
+ */
+export function requireUsuariosScope(): UsuariosScope {
+  const session = readServerSession();
+  if (!session) throw new Error('UNAUTHORIZED');
+  if (session.role === REGISTRADOR_ROLE && session.sub) {
+    return { scope: 'OWN', adminId: session.sub, session };
+  }
+  if (!hasAdminRole(session.role)) throw new Error('UNAUTHORIZED');
+  return { scope: 'ALL', session };
+}
+
+export function isWithinRegistradorEditWindow(createdAt: Date, now: Date = new Date()): boolean {
+  return now.getTime() - createdAt.getTime() < REGISTRADOR_EDIT_WINDOW_MS;
 }

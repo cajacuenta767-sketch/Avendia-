@@ -9,9 +9,11 @@ interface AdminSidebarProps {
   activeTab: AdminTab;
   onTabChange: (tab: AdminTab) => void;
   onLogout?: () => void;
+  /** El REGISTRADOR solo ve el módulo de docentes. */
+  isRegistrador?: boolean;
 }
 
-export const AdminSidebar: React.FC<AdminSidebarProps> = ({ activeTab, onTabChange, onLogout }) => {
+export const AdminSidebar: React.FC<AdminSidebarProps> = ({ activeTab, onTabChange, onLogout, isRegistrador = false }) => {
   const resolveAdminName = (parsed: any): string => {
     const email = (parsed?.email || '').toLowerCase();
     if (email === 'cajacuenta767@gmail.com' || email === 'cajacuenta767') {
@@ -180,6 +182,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ activeTab, onTabChan
       {isMobileMenuOpen && (
         <div className="lg:hidden bg-slate-900 border-b border-slate-800 p-4 space-y-3 sticky top-[53px] z-40 animate-in fade-in slide-in-from-top-2 duration-150">
           <nav className="grid grid-cols-2 gap-2">
+            {!isRegistrador && (
             <button
               type="button"
               onClick={() => handleSelectTab('inicio')}
@@ -192,6 +195,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ activeTab, onTabChan
               </svg>
               <span>Inicio</span>
             </button>
+            )}
 
             <button
               type="button"
@@ -206,6 +210,8 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ activeTab, onTabChan
               <span>Usuarios</span>
             </button>
 
+            {!isRegistrador && (
+            <>
             <button
               type="button"
               onClick={() => handleSelectTab('cuadernillos')}
@@ -247,6 +253,8 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ activeTab, onTabChan
               </svg>
               <span>Ver como docente</span>
             </Link>
+            </>
+            )}
           </nav>
 
           <div className="pt-2 border-t border-slate-800 flex items-center justify-between">
@@ -289,6 +297,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ activeTab, onTabChan
           {/* Menú de Navegación Lateral */}
           <nav className="space-y-1">
             {/* Inicio */}
+            {!isRegistrador && (
             <button
               type="button"
               onClick={() => onTabChange('inicio')}
@@ -303,6 +312,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ activeTab, onTabChan
               </svg>
               <span>Inicio</span>
             </button>
+            )}
 
             {/* Usuarios */}
             {permissions.permisoUsuarios ? (
@@ -333,6 +343,8 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ activeTab, onTabChan
               </div>
             )}
 
+            {!isRegistrador && (
+            <>
             {/* Banco de cuadernillos */}
             {permissions.permisoCuadernillos ? (
               <button
@@ -403,6 +415,8 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ activeTab, onTabChan
               </svg>
               <span>Ver como docente</span>
             </Link>
+            </>
+            )}
           </nav>
         </div>
 
@@ -414,7 +428,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ activeTab, onTabChan
             </div>
             <div className="truncate">
               <p className="text-xs font-bold text-white truncate">{adminUser.name}</p>
-              <p className="text-[10px] text-slate-400 truncate">{adminUser.role}</p>
+              <p className="text-[10px] text-slate-400 truncate">{isRegistrador ? 'REGISTRADOR' : adminUser.role}</p>
             </div>
           </div>
 

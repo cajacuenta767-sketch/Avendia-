@@ -7,7 +7,14 @@ import { prisma } from '@/lib/prisma';
 import { verifyAdminSession } from '@/services/adminService';
 import { sendOtpEmail } from '@/lib/email';
 import { buildDocenteAccessBadge, buildDocenteAccessBadges, condenseAccessBadges } from '@/utils/badgeUtils';
-import { setServerSession } from '@/lib/serverSession';
+import {
+  isWithinRegistradorEditWindow,
+  readServerSession,
+  REGISTRADOR_EDIT_WINDOW_MS,
+  requireUsuariosScope,
+  setServerSession,
+  type UsuariosScope,
+} from '@/lib/serverSession';
 import { z } from 'zod';
 import { generateDocentePin, normalizeDocentePin } from '@/lib/docentePin';
 import { USER_IMPORT_COLUMN_FIELDS } from '@/types/userImport';
@@ -76,6 +83,8 @@ export interface UsuarioDocenteItem {
   tiposAcceso?: string[];
   creadoPor?: string;
   modificadoPor?: string;
+  /** Solo para REGISTRADOR: fecha ISO hasta la que puede modificar a este docente. */
+  editableHasta?: string;
   fechaInicio: string;
   fechaFin: string;
   fechaModificacion?: string;
@@ -267,19 +276,57 @@ function formatDateTimePE(dateObj: Date): string {
 let usuariosCache: { timestamp: number; data: UsuarioDocenteItem[] } | null = null;
 const USUARIOS_CACHE_TTL = 60000;
 
+type ActionError = { code: string; message: string };
+
+const UNAUTHORIZED_ERROR: ActionError = { code: 'UNAUTHORIZED', message: 'Acceso denegado.' };
+
+function resolveUsuariosScope(): UsuariosScope | null {
+  try {
+    return requireUsuariosScope();
+  } catch {
+    return null;
+  }
+}
+
+// Un REGISTRADOR solo puede modificar docentes que él creó y durante los primeros 14 días.
+async function checkDocenteModifiable(scope: UsuariosScope, docenteId: string): Promise<ActionError | null> {
+  if (scope.scope === 'ALL') return null;
+  const target = await prisma.usuarioDocente.findUnique({
+    where: { id: docenteId },
+    select: { creadoPorAdminId: true, createdAt: true },
+  });
+  if (!target || target.creadoPorAdminId !== scope.adminId) {
+    return { code: 'FORBIDDEN', message: 'No tienes permiso sobre este docente.' };
+  }
+  if (!isWithinRegistradorEditWindow(target.createdAt)) {
+    return { code: 'EDIT_WINDOW_EXPIRED', message: 'Pasaron 14 días desde el registro de este docente; ya no puedes modificarlo.' };
+  }
+  return null;
+}
+
+// Para un REGISTRADOR el responsable se toma de la base de datos, no del cliente.
+async function resolveResponsable(scope: UsuariosScope, clientValue: string | undefined, fallback: string): Promise<string> {
+  if (scope.scope === 'ALL') return clientValue || fallback;
+  const admin = await prisma.adminUser.findUnique({ where: { id: scope.adminId }, select: { nombre: true } });
+  return admin?.nombre || scope.session.email || fallback;
+}
+
 export async function invalidateUsuariosCache() {
   usuariosCache = null;
 }
 
 export async function getUsuariosAction(): Promise<ActionResponse<UsuarioDocenteItem[]>> {
   try {
-    if (!(await verifyAdminSession())) return { success: false, error: { code: 'UNAUTHORIZED', message: 'Acceso denegado.' } };
+    const scope = resolveUsuariosScope();
+    if (!scope) return { success: false, error: UNAUTHORIZED_ERROR };
+    const isOwnScope = scope.scope === 'OWN';
     const now = Date.now();
-    if (usuariosCache && (now - usuariosCache.timestamp < USUARIOS_CACHE_TTL)) {
+    if (!isOwnScope && usuariosCache && (now - usuariosCache.timestamp < USUARIOS_CACHE_TTL)) {
       return { success: true, data: usuariosCache.data };
     }
 
     const dbUsers = await prisma.usuarioDocente.findMany({
+      where: isOwnScope ? { creadoPorAdminId: scope.adminId } : undefined,
       orderBy: [
         { createdAt: 'desc' },
         { id: 'desc' },
@@ -332,10 +379,11 @@ export async function getUsuariosAction(): Promise<ActionResponse<UsuarioDocente
         fechaFin: formatDateTimePE(u.fechaFin),
         fechaModificacion: formatDateTimePE(u.updatedAt || u.fechaInicio),
         estado: new Date(u.fechaFin) < new Date() ? 'VENCIDO' : 'PREMIUM',
+        ...(isOwnScope && { editableHasta: new Date(u.createdAt.getTime() + REGISTRADOR_EDIT_WINDOW_MS).toISOString() }),
       };
     });
 
-    usuariosCache = { timestamp: now, data: formatted };
+    if (!isOwnScope) usuariosCache = { timestamp: now, data: formatted };
     return { success: true, data: formatted };
   } catch (error: any) {
     console.error('❌ ERROR GET USUARIOS:', error);
@@ -390,8 +438,9 @@ export async function createUsuarioAction(data: {
   fechaFin?: string;
 }): Promise<ActionResponse<UsuarioDocenteItem>> {
   try {
-    const isAdmin = await verifyAdminSession();
-    if (!isAdmin) return { success: false, error: { code: 'UNAUTHORIZED', message: 'Acceso denegado.' } };
+    const scope = resolveUsuariosScope();
+    if (!scope) return { success: false, error: UNAUTHORIZED_ERROR };
+    const isOwnScope = scope.scope === 'OWN';
 
     const nombreTrimmed = (data.nombre || '').trim();
     const emailTrimmed = (data.email || '').trim().toLowerCase();
@@ -406,7 +455,7 @@ export async function createUsuarioAction(data: {
     const areasJson = JSON.stringify(areasArr);
     const tiposAccesoArr = data.tiposAcceso && data.tiposAcceso.length > 0 ? data.tiposAcceso : ['Ascenso', 'Nombramiento', 'Directivo'];
     const tiposAccesoJson = JSON.stringify(tiposAccesoArr);
-    const adminResponsable = data.creadoPor || 'Administrador';
+    const adminResponsable = await resolveResponsable(scope, data.creadoPor, 'Administrador');
 
     let finalNombre = (data.nombre || '').trim();
     const isNameInvalid = !finalNombre || INVALID_DOCENTE_NAMES_SET.has(finalNombre.toUpperCase());
@@ -433,8 +482,9 @@ export async function createUsuarioAction(data: {
     const isPrueba = (data.rol || '').toUpperCase().includes('PRUEBA') || (data.rol || '').toUpperCase().includes('24H') || (data.rol || '').toUpperCase().includes('TRIAL');
     const rolFinal = isPrueba ? 'PRUEBA_GRATIS_24H' : 'DOCENTE';
 
-    const fechaInicioObj = parseToDateObj(data.fechaInicio, new Date());
-    const fechaFinObj = calculateExpirationDate(rolFinal, data.fechaFin);
+    // Un REGISTRADOR no define vigencias: se aplica la duración estándar del plan.
+    const fechaInicioObj = isOwnScope ? new Date() : parseToDateObj(data.fechaInicio, new Date());
+    const fechaFinObj = calculateExpirationDate(rolFinal, isOwnScope ? undefined : data.fechaFin);
 
     const created = await prisma.usuarioDocente.create({
       data: {
@@ -450,6 +500,7 @@ export async function createUsuarioAction(data: {
         observacion: telefonoTrimmed || null,
         creadoPor: adminResponsable,
         modificadoPor: adminResponsable,
+        creadoPorAdminId: isOwnScope ? scope.adminId : null,
         fechaInicio: fechaInicioObj,
         fechaFin: fechaFinObj,
       },
@@ -476,6 +527,7 @@ export async function createUsuarioAction(data: {
         fechaFin: formatDateTimePE(created.fechaFin),
         fechaModificacion: formatDateTimePE(created.updatedAt),
         estado: new Date(created.fechaFin) < new Date() ? 'VENCIDO' : 'PREMIUM',
+        ...(isOwnScope && { editableHasta: new Date(created.createdAt.getTime() + REGISTRADOR_EDIT_WINDOW_MS).toISOString() }),
       },
     };
   } catch (error: any) {
@@ -508,7 +560,11 @@ export async function toggleUserStatusAction(
   adminResponsable: string = 'Administrador'
 ): Promise<ActionResponse<{ id: string; nuevoEstado: 'PREMIUM' | 'VENCIDO' }>> {
   try {
-    if (!(await verifyAdminSession())) return { success: false, error: { code: 'UNAUTHORIZED', message: 'Acceso denegado.' } };
+    const scope = resolveUsuariosScope();
+    if (!scope) return { success: false, error: UNAUTHORIZED_ERROR };
+    const scopeError = await checkDocenteModifiable(scope, id);
+    if (scopeError) return { success: false, error: scopeError };
+    const responsable = await resolveResponsable(scope, adminResponsable, 'Administrador');
     const user = await prisma.usuarioDocente.findUnique({ where: { id } });
     if (!user) return { success: false, error: { code: 'NOT_FOUND', message: 'Usuario no encontrado.' } };
 
@@ -543,7 +599,7 @@ export async function toggleUserStatusAction(
         fechaInicio: isCurrentlyActive ? user.fechaInicio : ahora,
         fechaFin: nuevaFechaFin,
         tiposAcceso: JSON.stringify(currentAcc),
-        modificadoPor: adminResponsable,
+        modificadoPor: responsable,
       },
     });
 
@@ -582,7 +638,8 @@ export async function updateUsuarioAction(
   }
 ): Promise<ActionResponse<{ id: string }>> {
   try {
-    if (!(await verifyAdminSession())) return { success: false, error: { code: 'UNAUTHORIZED', message: 'Acceso denegado.' } };
+    const scope = resolveUsuariosScope();
+    if (!scope) return { success: false, error: UNAUTHORIZED_ERROR };
     const idResult = z.string().trim().min(1).safeParse(id);
     const dataResult = updateUsuarioSchema.safeParse(data);
     if (!idResult.success || !dataResult.success) {
@@ -591,6 +648,15 @@ export async function updateUsuarioAction(
 
     const validId = idResult.data;
     const validData = dataResult.data;
+    const scopeError = await checkDocenteModifiable(scope, validId);
+    if (scopeError) return { success: false, error: scopeError };
+    if (scope.scope === 'OWN') {
+      // La vigencia de la licencia solo la gestionan los administradores.
+      delete validData.fechaInicio;
+      delete validData.fechaFin;
+      delete validData.renewSubscription;
+      validData.modificadoPor = await resolveResponsable(scope, undefined, 'Administrador');
+    }
     const updatePayload: Prisma.UsuarioDocenteUpdateInput = {};
     const requestedPin = validData.pin?.trim();
     if (requestedPin) {
@@ -666,14 +732,17 @@ export async function regenerateDocentePinAction(
   id: string
 ): Promise<ActionResponse<{ id: string; pin: string }>> {
   try {
-    if (!(await verifyAdminSession())) {
-      return { success: false, error: { code: 'UNAUTHORIZED', message: 'Acceso denegado.' } };
+    const scope = resolveUsuariosScope();
+    if (!scope) {
+      return { success: false, error: UNAUTHORIZED_ERROR };
     }
 
     const idResult = z.string().trim().min(1).safeParse(id);
     if (!idResult.success) {
       return { success: false, error: { code: 'INVALID_USER_ID', message: 'Usuario inválido.' } };
     }
+    const scopeError = await checkDocenteModifiable(scope, idResult.data);
+    if (scopeError) return { success: false, error: scopeError };
 
     const updated = await prisma.usuarioDocente.update({
       where: { id: idResult.data },
@@ -1922,6 +1991,12 @@ export async function updatePerfilDocenteAction(data: {
       return { success: false, error: { code: 'INVALID_INPUT', message: 'Correo no válido.' } };
     }
 
+    // Solo el propio docente (sesión firmada) o un administrador puede editar el perfil.
+    const session = readServerSession();
+    if (!session || (session.email.toLowerCase() !== rawEmail && !(await verifyAdminSession()))) {
+      return { success: false, error: UNAUTHORIZED_ERROR };
+    }
+
     const updated = await prisma.usuarioDocente.update({
       where: { email: rawEmail },
       data: {
@@ -1955,10 +2030,12 @@ export async function toggleDocenteTipoAccesoAction(
   tipo: 'Ascenso' | 'Nombramiento' | 'Directivo'
 ): Promise<ActionResponse<{ tiposAcceso: string[] }>> {
   try {
-    const isAdmin = await verifyAdminSession();
-    if (!isAdmin) {
-      return { success: false, error: { code: 'UNAUTHORIZED', message: 'Acceso denegado.' } };
+    const scope = resolveUsuariosScope();
+    if (!scope) {
+      return { success: false, error: UNAUTHORIZED_ERROR };
     }
+    const scopeError = await checkDocenteModifiable(scope, userId);
+    if (scopeError) return { success: false, error: scopeError };
 
     const user = await prisma.usuarioDocente.findUnique({
       where: { id: userId },
@@ -2029,6 +2106,7 @@ export async function importarDocentesDesdeExcelAction(
   adminResponsable: string = 'Administrador'
 ): Promise<ActionResponse<{ creados: number; actualizados: number; errores: string[] }>> {
   try {
+    if (!(await verifyAdminSession())) return { success: false, error: UNAUTHORIZED_ERROR };
     const buffer = Buffer.from(base64Data.split(',')[1] || base64Data, 'base64');
     const workbook = XLSX.read(buffer, { type: 'buffer' });
     const rawRows: any[] = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { defval: '' });

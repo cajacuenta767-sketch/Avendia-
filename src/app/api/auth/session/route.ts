@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { readServerSession } from '@/lib/serverSession';
+import { readServerSession, REGISTRADOR_ROLE } from '@/lib/serverSession';
 
 const ADMIN_ROLES = new Set(['ADMIN', 'ADMINISTRADOR', 'SUPERADMINISTRADOR', 'GESTOR_LICENCIAS']);
 
@@ -15,6 +15,7 @@ export async function GET() {
     role: session.role,
     email: session.email,
     isAdmin: ADMIN_ROLES.has(session.role),
+    isRegistrador: session.role === REGISTRADOR_ROLE,
     permissions: session.permissions ?? {},
   });
 }

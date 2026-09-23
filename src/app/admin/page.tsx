@@ -17,6 +17,7 @@ function AdminContent() {
   const router = useRouter();
 
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const [isRegistrador, setIsRegistrador] = useState(false);
 
   const [permissions, setPermissions] = useState({
     permisoUsuarios: true,
@@ -34,11 +35,25 @@ function AdminContent() {
         const data = await response.json() as {
           authenticated?: boolean;
           isAdmin?: boolean;
+          isRegistrador?: boolean;
           role?: string;
           permissions?: Record<string, boolean>;
         };
 
         if (!active) return;
+
+        // El REGISTRADOR solo accede al módulo de docentes (alcance limitado en el servidor).
+        if (data.authenticated && data.isRegistrador) {
+          setIsRegistrador(true);
+          setPermissions({
+            permisoUsuarios: true,
+            permisoCuadernillos: false,
+            permisoRecursos: false,
+            permisoMetricas: false,
+          });
+          setIsAuthenticated(true);
+          return;
+        }
 
         if (data.authenticated && data.isAdmin) {
           const isSuperAdmin = data.role === 'SUPERADMINISTRADOR';
@@ -72,7 +87,7 @@ function AdminContent() {
   };
 
   const tabParam = searchParams.get('tab') as AdminTab;
-  const activeTab: AdminTab = ['inicio', 'usuarios', 'cuadernillos', 'recursos'].includes(tabParam)
+  const activeTab: AdminTab = !isRegistrador && ['inicio', 'usuarios', 'cuadernillos', 'recursos'].includes(tabParam)
     ? tabParam
     : 'usuarios';
 
@@ -100,7 +115,7 @@ function AdminContent() {
 
   return (
     <div className="min-h-screen lg:h-screen flex flex-col lg:flex-row bg-gray-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 overflow-x-hidden relative">
-      <AdminSidebar activeTab={activeTab} onTabChange={handleTabChange} onLogout={handleLogout} />
+      <AdminSidebar activeTab={activeTab} onTabChange={handleTabChange} onLogout={handleLogout} isRegistrador={isRegistrador} />
 
       <div className="flex-1 flex flex-col min-w-0 min-h-0 lg:h-screen overflow-hidden">
         <AdminHeader />
@@ -128,7 +143,7 @@ function AdminContent() {
           ) : (
             <>
               {activeTab === 'inicio' && <InicioView onNavigateTab={handleTabChange} />}
-              {activeTab === 'usuarios' && <UsuariosView />}
+              {activeTab === 'usuarios' && <UsuariosView isRegistrador={isRegistrador} />}
               {activeTab === 'cuadernillos' && <BancoCuadernillosView />}
               {activeTab === 'recursos' && <RecursosAdminView />}
             </>
