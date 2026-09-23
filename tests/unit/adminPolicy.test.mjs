@@ -11,6 +11,9 @@ import {
   isPanelRole,
   isWithinRegistradorEditWindow,
   validateAdminPassword,
+  buildSemanasAltas,
+  getPeruWeekStart,
+  getSemanaIndex,
 } from '../../src/lib/adminPolicy.ts';
 
 test('REGISTRADOR es rol de panel pero no administrador', () => {
@@ -68,4 +71,24 @@ test('limitador de intentos: bloquea tras el máximo y se libera al vencer la ve
   limiter.registerFailure('b@x.pe', t0);
   limiter.reset('b@x.pe');
   assert.equal(limiter.isBlocked('b@x.pe', t0), false);
+});
+
+test('semana de altas: lunes 00:00 a domingo 23:59 en hora de Perú', () => {
+  // Miércoles 23 sep 2026, 10:00 Lima -> lunes 21 sep 00:00 Lima (05:00 UTC)
+  assert.equal(getPeruWeekStart(new Date('2026-09-23T15:00:00Z')).toISOString(), '2026-09-21T05:00:00.000Z');
+  // Lunes 21 sep 00:30 UTC es aún domingo 20 sep en Lima -> semana anterior
+  assert.equal(getPeruWeekStart(new Date('2026-09-21T00:30:00Z')).toISOString(), '2026-09-14T05:00:00.000Z');
+  // Domingo 27 sep 23:59 Lima sigue en la semana del 21
+  assert.equal(getPeruWeekStart(new Date('2026-09-28T04:59:00Z')).toISOString(), '2026-09-21T05:00:00.000Z');
+});
+
+test('semanas de altas: más reciente primero y asignación por índice', () => {
+  const now = new Date('2026-09-23T15:00:00Z');
+  const semanas = buildSemanasAltas(4, now);
+  assert.equal(semanas.length, 4);
+  assert.equal(semanas[0].inicio.toISOString(), '2026-09-21T05:00:00.000Z');
+  assert.equal(semanas[3].inicio.toISOString(), '2026-08-31T05:00:00.000Z');
+  assert.equal(getSemanaIndex(new Date('2026-09-22T12:00:00Z'), semanas), 0);
+  assert.equal(getSemanaIndex(new Date('2026-09-20T12:00:00Z'), semanas), 1);
+  assert.equal(getSemanaIndex(new Date('2026-08-01T12:00:00Z'), semanas), -1);
 });

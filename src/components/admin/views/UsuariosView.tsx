@@ -5,7 +5,12 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { UserFormModal, UserFormData } from '@/components/admin/modals/UserFormModal';
 import { AdminUserFormModal } from '@/components/admin/modals/AdminUserFormModal';
 import { BulkUserImportModal } from '@/components/admin/modals/BulkUserImportModal';
-import { DocenteAuditoriaPanel, RegistradoresReportPanel } from '@/components/admin/views/RegistradoresPanels';
+import {
+  AltasSemanalesPanel,
+  DocenteAuditoriaPanel,
+  MisAltasSemanalesResumen,
+  RegistradoresReportPanel,
+} from '@/components/admin/views/RegistradoresPanels';
 import {
   getUsuariosAction,
   createUsuarioAction,
@@ -1000,6 +1005,8 @@ export const UsuariosView: React.FC<UsuariosViewProps> = ({ isRegistrador = fals
         </div>
       )}
 
+      {isRegistrador && <MisAltasSemanalesResumen refreshKey={users.length} />}
+
       {/* 3. Barra de Filtros Completa */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-100 dark:border-slate-800 p-3 sm:p-4 shadow-xs flex flex-col 2xl:flex-row items-stretch 2xl:items-center justify-between gap-3">
         <form onSubmit={handleSearchSubmit} className="relative flex-1 w-full min-w-0">
@@ -1475,7 +1482,10 @@ export const UsuariosView: React.FC<UsuariosViewProps> = ({ isRegistrador = fals
               </tbody>
             </table>
           ) : (
-            <RegistradoresReportPanel onToast={showToast} />
+            <>
+              <AltasSemanalesPanel onToast={showToast} />
+              <RegistradoresReportPanel onToast={showToast} />
+            </>
           )}
         </div>
 

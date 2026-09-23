@@ -18,7 +18,7 @@ import {
   type SessionPayload,
   type UsuariosScope,
 } from '@/lib/serverSession';
-import { DAY_MS, SUPERADMIN_ROLE } from '@/lib/adminPolicy';
+import { buildSemanasAltas, DAY_MS, getSemanaIndex, SUPERADMIN_ROLE } from '@/lib/adminPolicy';
 import { randomInt } from 'crypto';
 import { z } from 'zod';
 import { generateDocentePin, normalizeDocentePin } from '@/lib/docentePin';
@@ -2555,5 +2555,109 @@ export async function getReporteRegistradoresAction(
   } catch (error: unknown) {
     console.error('❌ [REPORTE REGISTRADORES ERROR]:', error);
     return { success: false, error: { code: 'REPORT_FAILED', message: 'No se pudo generar el reporte.' } };
+  }
+}
+
+const ALTAS_ADMINISTRACION_ID = '__administracion';
+const ALTAS_OTROS_ID = '__registradores_eliminados';
+
+export interface AltasSemanalesColumna {
+  id: string;
+  nombre: string;
+  estado?: string;
+}
+
+export interface AltasSemanaFila {
+  /** Lunes 00:00 hora de Perú (ISO). */
+  inicio: string;
+  /** Domingo 23:59:59 hora de Perú (ISO). */
+  fin: string;
+  esActual: boolean;
+  conteos: Record<string, number>;
+  total: number;
+}
+
+export interface AltasSemanalesReporte {
+  columnas: AltasSemanalesColumna[];
+  semanas: AltasSemanaFila[];
+}
+
+const semanasAltasSchema = z.union([z.literal(4), z.literal(8), z.literal(12), z.literal(26)]);
+
+/**
+ * Conteo semanal (lunes a domingo, hora de Perú) de docentes agregados.
+ * Administradores: todos los registradores más la columna "Administración".
+ * REGISTRADOR: únicamente su propio conteo.
+ */
+export async function getAltasSemanalesAction(semanas: number = 8): Promise<ActionResponse<AltasSemanalesReporte>> {
+  const scope = await resolveUsuariosScope();
+  if (!scope) return { success: false, error: UNAUTHORIZED_ERROR };
+
+  const semanasResult = semanasAltasSchema.safeParse(semanas);
+  if (!semanasResult.success) {
+    return { success: false, error: { code: 'INVALID_WEEKS', message: 'Cantidad de semanas inválida.' } };
+  }
+
+  try {
+    const rangos = buildSemanasAltas(semanasResult.data);
+    const desde = rangos[rangos.length - 1].inicio;
+
+    let columnas: AltasSemanalesColumna[];
+    if (scope.scope === 'OWN') {
+      const propio = await prisma.adminUser.findUnique({ where: { id: scope.adminId }, select: { nombre: true, estado: true } });
+      columnas = [{ id: scope.adminId, nombre: propio?.nombre || 'Mis altas', estado: propio?.estado }];
+    } else {
+      const registradores = await prisma.adminUser.findMany({
+        where: { rol: REGISTRADOR_ROLE },
+        select: { id: true, nombre: true, estado: true },
+        orderBy: { nombre: 'asc' },
+      });
+      columnas = [
+        ...registradores.map((r) => ({ id: r.id, nombre: r.nombre, estado: r.estado })),
+        { id: ALTAS_ADMINISTRACION_ID, nombre: 'Administración' },
+      ];
+    }
+
+    const docentes = await prisma.usuarioDocente.findMany({
+      where: {
+        createdAt: { gte: desde },
+        ...(scope.scope === 'OWN' && { creadoPorAdminId: scope.adminId }),
+      },
+      select: { creadoPorAdminId: true, createdAt: true },
+    });
+
+    const columnaIds = new Set(columnas.map((c) => c.id));
+    const filas: AltasSemanaFila[] = rangos.map((rango, index) => ({
+      inicio: rango.inicio.toISOString(),
+      fin: new Date(rango.fin.getTime() - 1).toISOString(),
+      esActual: index === 0,
+      conteos: Object.fromEntries(columnas.map((c) => [c.id, 0])),
+      total: 0,
+    }));
+
+    let hayOtros = false;
+    for (const docente of docentes) {
+      const index = getSemanaIndex(docente.createdAt, rangos);
+      if (index < 0) continue;
+      let columnaId = docente.creadoPorAdminId || ALTAS_ADMINISTRACION_ID;
+      if (!columnaIds.has(columnaId)) {
+        // Docentes de un registrador que ya fue eliminado.
+        columnaId = ALTAS_OTROS_ID;
+        hayOtros = true;
+      }
+      const fila = filas[index];
+      fila.conteos[columnaId] = (fila.conteos[columnaId] || 0) + 1;
+      fila.total += 1;
+    }
+
+    if (hayOtros) {
+      columnas.push({ id: ALTAS_OTROS_ID, nombre: 'Registradores eliminados' });
+      for (const fila of filas) fila.conteos[ALTAS_OTROS_ID] = fila.conteos[ALTAS_OTROS_ID] || 0;
+    }
+
+    return { success: true, data: { columnas, semanas: filas } };
+  } catch (error: unknown) {
+    console.error('❌ [ALTAS SEMANALES ERROR]:', error);
+    return { success: false, error: { code: 'REPORT_FAILED', message: 'No se pudo generar el conteo semanal.' } };
   }
 }

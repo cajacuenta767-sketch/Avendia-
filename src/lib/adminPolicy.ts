@@ -89,3 +89,36 @@ export function createAttemptLimiter(maxFailures: number, windowMs: number): Att
     },
   };
 }
+
+// Perú no aplica horario de verano: UTC-05:00 todo el año.
+const PERU_OFFSET_MS = 5 * 60 * 60 * 1000;
+export const WEEK_MS = 7 * DAY_MS;
+
+export interface SemanaAltas {
+  /** Lunes 00:00 hora de Perú (instante UTC). */
+  inicio: Date;
+  /** Lunes siguiente 00:00 hora de Perú (exclusivo). */
+  fin: Date;
+}
+
+/** Lunes 00:00 (hora de Perú) de la semana que contiene `date`. */
+export function getPeruWeekStart(date: Date): Date {
+  const local = new Date(date.getTime() - PERU_OFFSET_MS);
+  const daysSinceMonday = (local.getUTCDay() + 6) % 7;
+  const mondayLocalMidnight = Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate()) - daysSinceMonday * DAY_MS;
+  return new Date(mondayLocalMidnight + PERU_OFFSET_MS);
+}
+
+/** Últimas `cantidad` semanas (lunes a domingo, hora de Perú), de la más reciente a la más antigua. */
+export function buildSemanasAltas(cantidad: number, now: Date = new Date()): SemanaAltas[] {
+  const actual = getPeruWeekStart(now).getTime();
+  return Array.from({ length: cantidad }, (_, i) => {
+    const inicio = actual - i * WEEK_MS;
+    return { inicio: new Date(inicio), fin: new Date(inicio + WEEK_MS) };
+  });
+}
+
+/** Índice de la semana (0 = actual) a la que pertenece `date`, o -1 si queda fuera del rango. */
+export function getSemanaIndex(date: Date, semanas: SemanaAltas[]): number {
+  return semanas.findIndex((s) => date >= s.inicio && date < s.fin);
+}
