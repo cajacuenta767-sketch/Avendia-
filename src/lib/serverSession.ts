@@ -2,7 +2,6 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import { cookies } from 'next/headers';
 import { prisma } from '@/lib/prisma';
 import {
-  ADMIN_SESSION_TTL_SECONDS,
   hasAdminRole,
   isPanelRole,
   REGISTRADOR_ROLE,
@@ -65,13 +64,8 @@ function sign(value: string): string {
   return createHmac('sha256', sessionSecret).update(value).digest('base64url');
 }
 
-// Las sesiones de panel (administradores y registradores) expiran a las 12 horas.
-function getSessionTtlSeconds(role: string): number {
-  return isPanelRole(role) ? ADMIN_SESSION_TTL_SECONDS : SESSION_TTL_SECONDS;
-}
-
 export function createServerSession(payload: Omit<SessionPayload, 'exp'>): string {
-  const body = Buffer.from(JSON.stringify({ ...payload, exp: Math.floor(Date.now() / 1000) + getSessionTtlSeconds(payload.role) })).toString('base64url');
+  const body = Buffer.from(JSON.stringify({ ...payload, exp: Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS })).toString('base64url');
   return `${body}.${sign(body)}`;
 }
 
@@ -84,10 +78,7 @@ export function readServerSession(): SessionPayload | null {
   try {
     if (!timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) return null;
     const payload = JSON.parse(Buffer.from(body, 'base64url').toString('utf8')) as SessionPayload;
-    const nowSeconds = Math.floor(Date.now() / 1000);
-    // Las sesiones de panel emitidas con la duración antigua (10 años) dejan de ser válidas.
-    if (isPanelRole(payload.role) && payload.exp - nowSeconds > ADMIN_SESSION_TTL_SECONDS) return null;
-    return payload.exp > nowSeconds ? payload : null;
+    return payload.exp > Math.floor(Date.now() / 1000) ? payload : null;
   } catch {
     return null;
   }
@@ -103,7 +94,7 @@ export function setServerSession(payload: Omit<SessionPayload, 'exp'>): void {
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
     path: '/',
-    maxAge: getSessionTtlSeconds(payload.role),
+    maxAge: SESSION_TTL_SECONDS,
   });
 }
 

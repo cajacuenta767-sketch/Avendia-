@@ -17,7 +17,7 @@ Con cuentas externas (registradores, SPEC-022) entrando al panel, se endurece la
 
 ### Seguridad
 - **RF-01 Revocación inmediata:** toda sesión de panel (administradores y registradores) se valida contra `admin_users` en cada acción: la cuenta debe seguir `ACTIVO` y con el mismo rol. Pausar, eliminar o cambiar de rol revoca el acceso al instante. Las cuentas oficiales por variables de entorno quedan exentas.
-- **RF-02 Duración de sesión:** las sesiones de panel expiran a las 12 horas. Las emitidas con la duración anterior (10 años) se rechazan y obligan a iniciar sesión de nuevo. La sesión de docentes no cambia.
+- **RF-02 Duración de sesión:** las sesiones de administradores, registradores y docentes no expiran: permanecen abiertas hasta que el usuario cierre sesión. La única excepción es RF-01 (cuenta de panel pausada, eliminada o con rol cambiado).
 - **RF-03 Contraseñas:** se elimina la contraseña por defecto `Admin2026!`. Al crear (y al cambiar) una contraseña de administrador se exige un mínimo de 10 caracteres; el modal incluye un generador aleatorio.
 - **RF-04 Login administrativo:** el usuario/correo es obligatorio (se elimina el acceso con solo la contraseña). Límite de 5 intentos fallidos por cuenta y 20 por IP cada 15 minutos.
 - **RF-05 Roles restringidos:** solo el Superadministrador puede crear, editar o eliminar cuentas `SUPERADMINISTRADOR` o `REGISTRADOR`.

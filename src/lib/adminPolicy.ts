@@ -8,7 +8,6 @@ export const ADMIN_ROLES = ['ADMIN', 'ADMINISTRADOR', 'SUPERADMINISTRADOR', 'GES
 
 export const DAY_MS = 24 * 60 * 60 * 1000;
 export const REGISTRADOR_EDIT_WINDOW_MS = 14 * DAY_MS;
-export const ADMIN_SESSION_TTL_SECONDS = 12 * 60 * 60;
 export const MIN_ADMIN_PASSWORD_LENGTH = 10;
 
 export function hasAdminRole(role: string): boolean {
