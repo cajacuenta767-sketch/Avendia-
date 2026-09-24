@@ -1,12 +1,25 @@
-version: '3.8'
-
 services:
+  db:
+    image: postgres:16-alpine
+    container_name: avend-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: avend_admin
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-AvendEscala_Secure_Db_2026!}
+      POSTGRES_DB: avend_escala
+    volumes:
+      - ./postgres_data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
+
   cuadernillos:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: cuadernillos-app
     restart: always
+    depends_on:
+      - db
     ports:
       - "3001:3000"
     env_file:
@@ -16,4 +29,5 @@ services:
       - PORT=3000
     volumes:
       - ./storage_uploads:/app/public/uploads
+
 
