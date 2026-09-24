@@ -9,9 +9,19 @@ interface AdminSidebarProps {
   activeTab: AdminTab;
   onTabChange: (tab: AdminTab) => void;
   onLogout?: () => void;
+  /** El REGISTRADOR solo ve el módulo de docentes. */
+  isRegistrador?: boolean;
+  /** Rol y permisos firmados por el servidor (/api/auth/session). */
+  role: string;
+  permissions: {
+    permisoUsuarios: boolean;
+    permisoCuadernillos: boolean;
+    permisoRecursos: boolean;
+    permisoMetricas: boolean;
+  };
 }
 
-export const AdminSidebar: React.FC<AdminSidebarProps> = ({ activeTab, onTabChange, onLogout }) => {
+export const AdminSidebar: React.FC<AdminSidebarProps> = ({ activeTab, onTabChange, onLogout, isRegistrador = false, role, permissions }) => {
   const resolveAdminName = (parsed: any): string => {
     const email = (parsed?.email || '').toLowerCase();
     if (email === 'cajacuenta767@gmail.com' || email === 'cajacuenta767') {
@@ -20,88 +30,27 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ activeTab, onTabChan
     return parsed?.name || parsed?.usuario || 'Administrador';
   };
 
-  const [adminUser, setAdminUser] = useState<{ name: string; email: string; role: string }>(() => {
-    if (typeof window !== 'undefined') {
+  // El nombre visible sale del almacenamiento local (solo presentación); el rol y los
+  // permisos llegan como props desde la sesión firmada por el servidor.
+  const readStoredAdmin = (): { name: string; email: string } => {
+    if (typeof window === 'undefined') return { name: 'Administrador', email: '' };
+    try {
       const sessionStr = localStorage.getItem('admin_auth_session') || sessionStorage.getItem('admin_auth_session');
-      if (sessionStr) {
-        try {
-          const parsed = JSON.parse(sessionStr);
-          const email = (parsed.email || '').toLowerCase();
-          const superList = ['cajacuenta767@gmail.com', 'avendoficial@gmail.com', 'avendocente@gmail.com', 'cajacuenta767', 'avendoficial', 'avendocente'];
-          const isSuper = superList.includes(email);
-          const finalName = resolveAdminName(parsed);
-
-          // Si el nombre guardado era el antiguo, actualizar el storage
-          if (parsed.name !== finalName) {
-            parsed.name = finalName;
-            localStorage.setItem('admin_auth_session', JSON.stringify(parsed));
-          }
-
-          return {
-            name: finalName,
-            email: parsed.email || '',
-            role: isSuper ? 'SUPERADMINISTRADOR' : (parsed.role || 'ADMINISTRADOR'),
-          };
-        } catch {}
-      }
+      if (!sessionStr) return { name: 'Administrador', email: '' };
+      const parsed = JSON.parse(sessionStr);
+      return { name: resolveAdminName(parsed), email: parsed.email || '' };
+    } catch {
+      return { name: 'Administrador', email: '' };
     }
-    return {
-      name: 'Administrador',
-      email: '',
-      role: 'ADMINISTRADOR',
-    };
-  });
+  };
+
+  const [storedAdmin, setStoredAdmin] = useState<{ name: string; email: string }>(readStoredAdmin);
+  const adminUser = { ...storedAdmin, role: role || 'ADMINISTRADOR' };
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  const [permissions, setPermissions] = useState({
-    permisoUsuarios: true,
-    permisoCuadernillos: true,
-    permisoRecursos: true,
-    permisoMetricas: true,
-  });
-
   useEffect(() => {
-    const updateSession = () => {
-      const sessionStr = localStorage.getItem('admin_auth_session') || sessionStorage.getItem('admin_auth_session');
-      if (sessionStr) {
-        try {
-          const parsed = JSON.parse(sessionStr);
-          const email = (parsed.email || '').toLowerCase();
-          const superList = ['cajacuenta767@gmail.com', 'avendocente@gmail.com', 'cajacuenta767', 'avendocente'];
-          const isSuper = superList.includes(email);
-          const finalName = resolveAdminName(parsed);
-
-          if (parsed.name !== finalName) {
-            parsed.name = finalName;
-            localStorage.setItem('admin_auth_session', JSON.stringify(parsed));
-          }
-
-          setAdminUser({
-            name: finalName,
-            email: parsed.email || '',
-            role: isSuper ? 'SUPERADMINISTRADOR' : (parsed.role || 'ADMINISTRADOR'),
-          });
-          if (isSuper) {
-            setPermissions({
-              permisoUsuarios: true,
-              permisoCuadernillos: true,
-              permisoRecursos: true,
-              permisoMetricas: true,
-            });
-          } else {
-            setPermissions({
-              permisoUsuarios: parsed.permisoUsuarios ?? true,
-              permisoCuadernillos: parsed.permisoCuadernillos ?? true,
-              permisoRecursos: parsed.permisoRecursos ?? true,
-              permisoMetricas: parsed.permisoMetricas ?? true,
-            });
-          }
-        } catch {}
-      }
-    };
-
-    updateSession();
+    const updateSession = () => setStoredAdmin(readStoredAdmin());
     window.addEventListener('admin_session_change', updateSession);
     return () => window.removeEventListener('admin_session_change', updateSession);
   }, []);
@@ -180,6 +129,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ activeTab, onTabChan
       {isMobileMenuOpen && (
         <div className="lg:hidden bg-slate-900 border-b border-slate-800 p-4 space-y-3 sticky top-[53px] z-40 animate-in fade-in slide-in-from-top-2 duration-150">
           <nav className="grid grid-cols-2 gap-2">
+            {!isRegistrador && (
             <button
               type="button"
               onClick={() => handleSelectTab('inicio')}
@@ -192,6 +142,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ activeTab, onTabChan
               </svg>
               <span>Inicio</span>
             </button>
+            )}
 
             <button
               type="button"
@@ -206,6 +157,8 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ activeTab, onTabChan
               <span>Usuarios</span>
             </button>
 
+            {!isRegistrador && (
+            <>
             <button
               type="button"
               onClick={() => handleSelectTab('cuadernillos')}
@@ -247,6 +200,8 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ activeTab, onTabChan
               </svg>
               <span>Ver como docente</span>
             </Link>
+            </>
+            )}
           </nav>
 
           <div className="pt-2 border-t border-slate-800 flex items-center justify-between">
@@ -289,6 +244,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ activeTab, onTabChan
           {/* Menú de Navegación Lateral */}
           <nav className="space-y-1">
             {/* Inicio */}
+            {!isRegistrador && (
             <button
               type="button"
               onClick={() => onTabChange('inicio')}
@@ -303,6 +259,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ activeTab, onTabChan
               </svg>
               <span>Inicio</span>
             </button>
+            )}
 
             {/* Usuarios */}
             {permissions.permisoUsuarios ? (
@@ -333,6 +290,8 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ activeTab, onTabChan
               </div>
             )}
 
+            {!isRegistrador && (
+            <>
             {/* Banco de cuadernillos */}
             {permissions.permisoCuadernillos ? (
               <button
@@ -403,6 +362,8 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ activeTab, onTabChan
               </svg>
               <span>Ver como docente</span>
             </Link>
+            </>
+            )}
           </nav>
         </div>
 
@@ -414,7 +375,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ activeTab, onTabChan
             </div>
             <div className="truncate">
               <p className="text-xs font-bold text-white truncate">{adminUser.name}</p>
-              <p className="text-[10px] text-slate-400 truncate">{adminUser.role}</p>
+              <p className="text-[10px] text-slate-400 truncate">{isRegistrador ? 'REGISTRADOR' : adminUser.role}</p>
             </div>
           </div>
 

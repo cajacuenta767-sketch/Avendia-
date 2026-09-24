@@ -5,7 +5,7 @@ import { invalidateEvaluacionesCache } from '@/services/evaluacionesService';
 import { revalidatePath } from 'next/cache';
 import fs from 'fs';
 import path from 'path';
-import { requireAdminSession } from '@/lib/serverSession';
+import { requireActiveAdminSession } from '@/lib/serverSession';
 import { z } from 'zod';
 
 export const dynamic = 'force-dynamic';
@@ -49,7 +49,7 @@ async function saveUploadedFileToDisk(file: File, prefix: string): Promise<strin
 export async function POST(req: NextRequest) {
   try {
     try {
-      requireAdminSession('cuadernillos');
+      await requireActiveAdminSession('cuadernillos');
     } catch (error: unknown) {
       const response = authorizationErrorResponse(error);
       if (response) return response;

@@ -100,7 +100,6 @@ function servePdfBufferWithRanges(
   const commonHeaders = {
     'Content-Type': contentType,
     'Content-Disposition': `inline; filename="documento${ext}"`,
-    'Access-Control-Allow-Origin': '*',
     'Accept-Ranges': 'bytes',
     'X-Content-Type-Options': 'nosniff',
   };
@@ -220,7 +219,6 @@ export async function GET(req: NextRequest) {
             headers: {
               'Content-Type': contentType,
               'Content-Disposition': 'inline',
-              'Access-Control-Allow-Origin': '*',
               'Accept-Ranges': 'bytes',
               'Content-Length': String(buffer.length),
               'Cache-Control': 'private, no-store',

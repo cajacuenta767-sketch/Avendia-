@@ -6,6 +6,12 @@ import { UserFormModal, UserFormData } from '@/components/admin/modals/UserFormM
 import { AdminUserFormModal } from '@/components/admin/modals/AdminUserFormModal';
 import { BulkUserImportModal } from '@/components/admin/modals/BulkUserImportModal';
 import {
+  AltasSemanalesPanel,
+  DocenteAuditoriaPanel,
+  MisAltasSemanalesResumen,
+  RegistradoresReportPanel,
+} from '@/components/admin/views/RegistradoresPanels';
+import {
   getUsuariosAction,
   createUsuarioAction,
   updateUsuarioAction,
@@ -98,11 +104,26 @@ const calcEndDateExact = (
   return `${y}-${m}-${day}`;
 };
 
-export const UsuariosView: React.FC = () => {
+interface UsuariosViewProps {
+  /** REGISTRADOR: solo ve y gestiona los docentes que él registró (alcance aplicado en el servidor). */
+  isRegistrador?: boolean;
+  /** Rol firmado por el servidor (/api/auth/session); decide qué herramientas se muestran. */
+  sessionRole?: string;
+}
+
+// Días restantes de la ventana de edición de 14 días del REGISTRADOR (0 = solo lectura).
+function getRegistradorDiasRestantes(user: UsuarioDocenteItem): number {
+  if (!user.editableHasta) return 0;
+  const remainingMs = Date.parse(user.editableHasta) - Date.now();
+  return remainingMs > 0 ? Math.ceil(remainingMs / (24 * 60 * 60 * 1000)) : 0;
+}
+
+export const UsuariosView: React.FC<UsuariosViewProps> = ({ isRegistrador = false, sessionRole = '' }) => {
   const [users, setUsers] = useState<UsuarioDocenteItem[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState('');
   const [estadoFilter, setEstadoFilter] = useState<'TODOS' | 'ACTIVO' | 'EXPIRADO'>('TODOS');
+  const [registradoPorFilter, setRegistradoPorFilter] = useState('TODOS');
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -126,41 +147,17 @@ export const UsuariosView: React.FC = () => {
     return name && name.trim() ? name.trim() : 'Administrador';
   };
 
-  // Administrador actualmente conectado
-  const [adminUser, setAdminUser] = useState<{ name: string; email: string; role: string }>(() => {
-    if (typeof window !== 'undefined') {
-      const sessionStr = localStorage.getItem('admin_auth_session') || sessionStorage.getItem('admin_auth_session');
-      if (sessionStr) {
-        try {
-          const parsed = JSON.parse(sessionStr);
-          const emailLower = (parsed.email || '').toLowerCase();
-          const superList = ['cajacuenta767@gmail.com', 'avendoficial@gmail.com', 'avendocente@gmail.com', 'cajacuenta767', 'avendoficial', 'avendocente'];
-          const isSuper = superList.includes(emailLower) || (parsed.role || '').toUpperCase().includes('SUPER');
-          const finalName = resolveAdminName(parsed.name || parsed.usuario, emailLower);
-          return {
-            name: finalName,
-            email: emailLower,
-            role: isSuper ? 'SUPERADMINISTRADOR' : 'ADMINISTRADOR',
-          };
-        } catch {}
-      }
-    }
-    return {
-      name: 'Administrador',
-      email: '',
-      role: 'ADMINISTRADOR',
-    };
-  });
-
-  const superAdmins = ['cajacuenta767@gmail.com', 'avendocente@gmail.com', 'cajacuenta767', 'avendocente'];
-  const isSuperAdmin =
-    superAdmins.includes((adminUser.email || '').toLowerCase()) ||
-    adminUser.role.toUpperCase().includes('SUPER');
+  // Administrador actualmente conectado: el nombre es solo presentación (almacenamiento local);
+  // el rol proviene de la sesión firmada por el servidor.
+  const [storedAdmin, setStoredAdmin] = useState<{ name: string; email: string }>({ name: 'Administrador', email: '' });
+  const effectiveRole = isRegistrador ? 'REGISTRADOR' : (sessionRole || 'ADMINISTRADOR');
+  const adminUser = { ...storedAdmin, role: effectiveRole };
+  const isSuperAdmin = !isRegistrador && sessionRole === 'SUPERADMINISTRADOR';
 
   const [adminTeam, setAdminTeam] = useState<AdminUserItem[]>([]);
   const [isAdminFormModalOpen, setIsAdminFormModalOpen] = useState(false);
   const [adminToEdit, setAdminToEdit] = useState<AdminUserItem | null>(null);
-  const [activeSubTab, setActiveSubTab] = useState<'docentes' | 'admin_team'>('docentes');
+  const [activeSubTab, setActiveSubTab] = useState<'docentes' | 'admin_team' | 'registradores'>('docentes');
 
   const loadAdminTeam = async () => {
     const res = await getAdminUsersAction();
@@ -175,23 +172,11 @@ export const UsuariosView: React.FC = () => {
       try {
         const parsed = JSON.parse(sessionStr);
         const emailLower = (parsed.email || '').toLowerCase();
-        const isSuper = superAdmins.includes(emailLower) || (parsed.role || '').toUpperCase().includes('SUPER');
-        const finalName = resolveAdminName(parsed.name, emailLower);
-
-        if (parsed.name !== finalName) {
-          parsed.name = finalName;
-          localStorage.setItem('admin_auth_session', JSON.stringify(parsed));
-        }
-
-        setAdminUser({
-          name: finalName,
-          email: emailLower,
-          role: isSuper ? 'SUPERADMINISTRADOR' : 'ADMINISTRADOR',
-        });
+        setStoredAdmin({ name: resolveAdminName(parsed.name || parsed.usuario, emailLower), email: emailLower });
       } catch {}
     }
-    loadAdminTeam();
-  }, []);
+    if (!isRegistrador) loadAdminTeam();
+  }, [isRegistrador]);
 
   const handleToggleAdminStatus = async (id: string, currentEstado: string, nombre: string) => {
     const nuevoEstado = currentEstado === 'ACTIVO' ? 'PAUSADO' : 'ACTIVO';
@@ -777,6 +762,7 @@ export const UsuariosView: React.FC = () => {
       // Filtro por Estado (Activo / Expirado)
       if (estadoFilter === 'ACTIVO' && u.estado !== 'PREMIUM') return false;
       if (estadoFilter === 'EXPIRADO' && u.estado !== 'VENCIDO') return false;
+      if (registradoPorFilter !== 'TODOS' && (u.creadoPor || 'Administrador') !== registradoPorFilter) return false;
 
       const query = searchQuery.toLocaleLowerCase().trim();
       if (!query) return true;
@@ -829,7 +815,11 @@ export const UsuariosView: React.FC = () => {
 
       return b.id.localeCompare(a.id);
     });
-  }, [users, adminEmailsSet, searchQuery, estadoFilter, activeSubTab]);
+  }, [users, adminEmailsSet, searchQuery, estadoFilter, registradoPorFilter, activeSubTab]);
+
+  const registradoPorOptions = useMemo(() => {
+    return Array.from(new Set(users.map((u) => u.creadoPor || 'Administrador'))).sort((a, b) => a.localeCompare(b));
+  }, [users]);
 
   const ITEMS_PER_PAGE = 100;
   const totalPages = Math.max(1, Math.ceil(filteredUsers.length / ITEMS_PER_PAGE));
@@ -840,7 +830,7 @@ export const UsuariosView: React.FC = () => {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, activeSubTab, estadoFilter]);
+  }, [searchQuery, activeSubTab, estadoFilter, registradoPorFilter]);
 
   const filteredAdminTeam = useMemo(() => {
     const superadminEmails = ['cajacuenta767@gmail.com', 'avendoficial@gmail.com', 'cajacuenta767', 'avendoficial'];
@@ -921,6 +911,7 @@ export const UsuariosView: React.FC = () => {
           </div>
         ) : (
           <div className="flex flex-col min-[460px]:flex-row gap-2 w-full sm:w-auto">
+            {!isRegistrador && (
             <button
               type="button"
               onClick={() => setIsBulkImportOpen(true)}
@@ -932,6 +923,7 @@ export const UsuariosView: React.FC = () => {
               </svg>
               <span>IMPORTAR EXCEL</span>
             </button>
+            )}
 
             <button
               type="button"
@@ -955,15 +947,17 @@ export const UsuariosView: React.FC = () => {
           </div>
           <div className="leading-tight text-xs">
             <strong className="font-extrabold text-indigo-900 dark:text-white">
-              Vista de {adminUser.role.toLowerCase()} ({adminUser.name})
+              Vista de {isRegistrador ? 'registrador' : adminUser.role.toLowerCase()} ({adminUser.name})
             </strong>{' '}
-            Puedes ver todos los accesos y la trazabilidad SaaS de quién creó o modificó cada registro.
+            {isRegistrador
+              ? 'Solo ves los docentes que registraste. Puedes modificarlos durante 14 días desde su registro; después quedan en solo lectura.'
+              : 'Puedes ver todos los accesos y la trazabilidad SaaS de quién creó o modificó cada registro.'}
           </div>
         </div>
 
         {/* Sub-pestañas Exclusivas para Superadministrador */}
         {isSuperAdmin && (
-          <div className="responsive-control-group bg-white dark:bg-slate-900 p-1.5 rounded-xl border border-gray-200 dark:border-slate-800 shadow-2xs w-full lg:w-auto lg:min-w-[290px]" style={{ '--responsive-control-columns': 2 } as React.CSSProperties}>
+          <div className="responsive-control-group bg-white dark:bg-slate-900 p-1.5 rounded-xl border border-gray-200 dark:border-slate-800 shadow-2xs w-full lg:w-auto lg:min-w-[290px]" style={{ '--responsive-control-columns': 3 } as React.CSSProperties}>
             <button
               type="button"
               onClick={() => setActiveSubTab('docentes')}
@@ -986,6 +980,17 @@ export const UsuariosView: React.FC = () => {
             >
               <span>🛡️ Equipo Admin ({filteredAdminTeam.length})</span>
             </button>
+            <button
+              type="button"
+              onClick={() => setActiveSubTab('registradores')}
+              className={`w-full px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                activeSubTab === 'registradores'
+                  ? 'bg-amber-600 text-white shadow-2xs'
+                  : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+              }`}
+            >
+              📈 Registradores
+            </button>
           </div>
         )}
       </div>
@@ -1000,9 +1005,11 @@ export const UsuariosView: React.FC = () => {
         </div>
       )}
 
+      {isRegistrador && <MisAltasSemanalesResumen refreshKey={users.length} />}
+
       {/* 3. Barra de Filtros Completa */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-100 dark:border-slate-800 p-3 sm:p-4 shadow-xs flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
-        <form onSubmit={handleSearchSubmit} className="relative flex-1 w-full">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-100 dark:border-slate-800 p-3 sm:p-4 shadow-xs flex flex-col 2xl:flex-row items-stretch 2xl:items-center justify-between gap-3">
+        <form onSubmit={handleSearchSubmit} className="relative flex-1 w-full min-w-0">
           <svg className="w-4 h-4 absolute left-3.5 top-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
           </svg>
@@ -1036,15 +1043,15 @@ export const UsuariosView: React.FC = () => {
           )}
         </form>
 
-        <div className="flex flex-wrap items-center justify-start lg:justify-end gap-2.5 w-full lg:w-auto shrink-0">
+        <div className="flex flex-col md:flex-row md:flex-wrap xl:flex-nowrap items-stretch md:items-center gap-2.5 w-full 2xl:w-auto shrink-0">
           {activeSubTab === 'docentes' && (
             <>
               {/* Botones de Filtro por Estado: Activo y Expirado */}
-              <div className="responsive-control-group bg-gray-100/80 dark:bg-slate-800 p-1 rounded-xl border border-gray-200 dark:border-slate-700" style={{ '--responsive-control-columns': 3 } as React.CSSProperties}>
+              <div className="responsive-control-group md:basis-full xl:basis-auto xl:flex-1 2xl:flex-none 2xl:!w-auto xl:![grid-template-columns:repeat(3,minmax(max-content,1fr))] bg-gray-100/80 dark:bg-slate-800 p-1 rounded-xl border border-gray-200 dark:border-slate-700" style={{ '--responsive-control-columns': 3 } as React.CSSProperties}>
                 <button
                   type="button"
                   onClick={() => setEstadoFilter('TODOS')}
-                  className={`w-full px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                  className={`w-full whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer ${
                     estadoFilter === 'TODOS'
                       ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-2xs'
                       : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
@@ -1055,7 +1062,7 @@ export const UsuariosView: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setEstadoFilter('ACTIVO')}
-                  className={`w-full px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer flex items-center justify-center space-x-1.5 ${
+                  className={`w-full whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer flex items-center justify-center space-x-1.5 ${
                     estadoFilter === 'ACTIVO'
                       ? 'bg-emerald-600 text-white shadow-2xs'
                       : 'text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50/50 dark:hover:bg-emerald-950/30'
@@ -1067,7 +1074,7 @@ export const UsuariosView: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setEstadoFilter('EXPIRADO')}
-                  className={`w-full px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer flex items-center justify-center space-x-1.5 ${
+                  className={`w-full whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer flex items-center justify-center space-x-1.5 ${
                     estadoFilter === 'EXPIRADO'
                       ? 'bg-rose-600 text-white shadow-2xs'
                       : 'text-rose-700 dark:text-rose-400 hover:bg-rose-50/50 dark:hover:bg-rose-950/30'
@@ -1080,13 +1087,29 @@ export const UsuariosView: React.FC = () => {
             </>
           )}
 
+          {activeSubTab === 'docentes' && !isRegistrador && registradoPorOptions.length > 1 && (
+            <select
+              value={registradoPorFilter}
+              onChange={(e) => setRegistradoPorFilter(e.target.value)}
+              aria-label="Filtrar por quién registró al docente"
+              className="w-full md:w-auto md:flex-1 xl:flex-none shrink-0 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 font-extrabold text-xs px-3 py-2 rounded-xl shadow-2xs cursor-pointer outline-none"
+            >
+              <option value="TODOS">Registrado por: Todos</option>
+              {registradoPorOptions.map((nombre) => (
+                <option key={nombre} value={nombre}>{nombre}</option>
+              ))}
+            </select>
+          )}
+
+          {activeSubTab !== 'registradores' && (
           <button
             type="button"
             onClick={handleExportarExcel}
-            className="w-full sm:w-auto justify-center bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 hover:bg-gray-50 text-slate-700 dark:text-slate-200 font-extrabold text-xs px-3.5 py-2 rounded-xl transition-all shadow-2xs flex items-center space-x-1.5 cursor-pointer"
+            className="w-full md:w-auto md:flex-1 xl:flex-none shrink-0 whitespace-nowrap justify-center bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 hover:bg-gray-50 text-slate-700 dark:text-slate-200 font-extrabold text-xs px-3.5 py-2 rounded-xl transition-all shadow-2xs flex items-center space-x-1.5 cursor-pointer"
           >
             <span>📊 Exportar Excel</span>
           </button>
+          )}
         </div>
       </div>
 
@@ -1126,6 +1149,8 @@ export const UsuariosView: React.FC = () => {
                   const editorNombre = u.modificadoPor || u.creadoPor || 'Administrador';
                   const creadorNombre = u.creadoPor || 'Administrador';
                   const tieneEdicionDiferente = u.modificadoPor && u.modificadoPor !== u.creadoPor;
+                  const diasEditables = isRegistrador ? getRegistradorDiasRestantes(u) : 0;
+                  const isSoloLectura = isRegistrador && diasEditables === 0;
 
                   return (
                     <tr key={u.id} className="hover:bg-gray-50/60 dark:hover:bg-slate-800/40 transition-colors">
@@ -1251,7 +1276,18 @@ export const UsuariosView: React.FC = () => {
 
                       {/* 10. ACCIONES FUNCIONALES */}
                       <td className="p-4 text-right">
+                        {isRegistrador && (
+                          <span
+                            className={`block mb-1.5 text-[10px] font-black uppercase whitespace-nowrap ${
+                              isSoloLectura ? 'text-slate-400' : 'text-amber-600 dark:text-amber-400'
+                            }`}
+                          >
+                            {isSoloLectura ? '🔒 Solo lectura' : `Editable ${diasEditables} día${diasEditables === 1 ? '' : 's'} más`}
+                          </span>
+                        )}
                         <div className="flex items-center justify-end space-x-1.5">
+                          {!isSoloLectura && (
+                          <>
                           {/* BOTÓN 1: EDITAR / PANTALLA FLOTANTE */}
                           <button
                             type="button"
@@ -1283,6 +1319,8 @@ export const UsuariosView: React.FC = () => {
                               </svg>
                             )}
                           </button>
+                          </>
+                          )}
 
                           {/* BOTÓN 3: VER DETALLES DE AUDITORÍA SAAS */}
                           <button
@@ -1301,7 +1339,7 @@ export const UsuariosView: React.FC = () => {
               )}
             </tbody>
           </table>
-          ) : (
+          ) : activeSubTab === 'admin_team' ? (
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-purple-50/80 dark:bg-slate-800/60 border-b border-gray-200/80 dark:border-slate-800 text-[10px] font-black uppercase tracking-wider text-purple-900 dark:text-purple-300">
@@ -1443,6 +1481,11 @@ export const UsuariosView: React.FC = () => {
                 )}
               </tbody>
             </table>
+          ) : (
+            <>
+              <AltasSemanalesPanel onToast={showToast} />
+              <RegistradoresReportPanel onToast={showToast} />
+            </>
           )}
         </div>
 
@@ -1528,6 +1571,7 @@ export const UsuariosView: React.FC = () => {
       <UserFormModal
         isOpen={isUserModalOpen}
         onClose={() => setIsUserModalOpen(false)}
+        hideVigencia={isRegistrador}
         onSubmit={handleAddUserFromModal}
       />
 
@@ -1777,6 +1821,7 @@ export const UsuariosView: React.FC = () => {
                 </div>
 
                 {/* 1. Información de Suscripción */}
+                {!isRegistrador && (
                 <div className="p-4 bg-slate-50/80 dark:bg-slate-800/40 rounded-2xl border border-slate-200/80 dark:border-slate-800 space-y-3">
                   <div className="flex items-center space-x-2 text-indigo-600 dark:text-indigo-400 font-black text-xs uppercase tracking-wider">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1854,6 +1899,7 @@ export const UsuariosView: React.FC = () => {
                     </div>
                   </div>
                 </div>
+                )}
 
                 {/* 2. Tipo de Acceso (Checkboxes) */}
                 <div className="p-4 bg-slate-50/80 dark:bg-slate-800/40 rounded-2xl border border-slate-200/80 dark:border-slate-800 space-y-2.5">
@@ -2069,6 +2115,18 @@ export const UsuariosView: React.FC = () => {
                   </span>
                 </div>
               </div>
+
+              {!isRegistrador && (
+                <DocenteAuditoriaPanel
+                  key={detailModal.user.id}
+                  docenteId={detailModal.user.id}
+                  creadoPorAdminId={detailModal.user.creadoPorAdminId}
+                  isSuperAdmin={isSuperAdmin}
+                  registradores={adminTeam.filter((adm) => adm.rol === 'REGISTRADOR').map((adm) => ({ id: adm.id, nombre: adm.nombre }))}
+                  onChanged={loadUsers}
+                  onToast={showToast}
+                />
+              )}
             </div>
 
             {/* Pie Fijo de Cierre */}

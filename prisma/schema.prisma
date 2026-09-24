@@ -246,11 +246,16 @@ model UsuarioDocente {
   observacion   String?
   creadoPor     String?  @default("Juan Avend")
   modificadoPor String?  @default("Juan Avend")
+  // AdminUser.id del REGISTRADOR que creó al docente (lo asigna el servidor desde la sesión firmada)
+  creadoPorAdminId String?
+  // Ampliación manual (Superadministrador) de la ventana de edición del REGISTRADOR
+  edicionHasta     DateTime?
   fechaInicio   DateTime @default(now())
   fechaFin      DateTime
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
+  @@index([creadoPorAdminId])
   @@map("usuarios_docentes")
 }
 
@@ -297,3 +302,20 @@ model NotificacionAdmin {
   @@map("notificaciones_admin")
 }
 
+// Historial de cambios sobre docentes (quién, qué, cuándo) para auditoría y comisiones
+model AuditoriaDocente {
+  id           String   @id @default(cuid())
+  docenteId    String
+  docenteEmail String
+  actorId      String
+  actorEmail   String
+  actorRol     String
+  accion       String   // CREAR | EDITAR | PAUSAR | REACTIVAR | PIN | TIPO_ACCESO | EXTENDER | ELIMINAR | REASIGNAR | AMPLIAR_EDICION
+  detalle      String?  // JSON con los campos modificados { campo: { antes, despues } }
+  createdAt    DateTime @default(now())
+
+  @@index([docenteId])
+  @@index([actorId])
+  @@index([createdAt])
+  @@map("auditoria_docentes")
+}

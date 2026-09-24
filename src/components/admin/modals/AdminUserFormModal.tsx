@@ -64,10 +64,25 @@ export const AdminUserFormModal: React.FC<AdminUserFormModalProps> = ({
 
   if (!isOpen) return null;
 
+  const MIN_PASSWORD_LENGTH = 10;
+
+  // Genera un código aleatorio de 12 caracteres sin símbolos ambiguos (0/O, 1/l/I).
+  const handleGeneratePassword = () => {
+    const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+    const values = new Uint32Array(12);
+    window.crypto.getRandomValues(values);
+    setPassword(Array.from(values, (v) => alphabet[v % alphabet.length]).join(''));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!nombre.trim() || !email.trim() || !usuario.trim()) {
       setErrorMsg('⚠️ Por favor completa el nombre, correo y usuario.');
+      return;
+    }
+    const needsPassword = !adminToEdit || password.trim().length > 0;
+    if (needsPassword && password.trim().length < MIN_PASSWORD_LENGTH) {
+      setErrorMsg(`⚠️ El código de acceso debe tener al menos ${MIN_PASSWORD_LENGTH} caracteres. Usa "Generar".`);
       return;
     }
 
@@ -101,7 +116,7 @@ export const AdminUserFormModal: React.FC<AdminUserFormModalProps> = ({
         nombre,
         email,
         usuario,
-        password: password.trim() ? password : 'Admin2026!',
+        password: password.trim(),
         rol,
         permisoUsuarios,
         permisoCuadernillos,
@@ -202,15 +217,25 @@ export const AdminUserFormModal: React.FC<AdminUserFormModalProps> = ({
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase">
                 CÓDIGO DE ACCESO / PIN ASIGNADO *
               </label>
-              <input
-                type="text"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Ej.: 202601"
-                className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-xs font-bold text-slate-900 dark:text-white outline-none focus:border-purple-600 transition-colors font-mono"
-              />
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder={adminToEdit ? 'Dejar vacío para no cambiar' : 'Mínimo 10 caracteres'}
+                  minLength={adminToEdit ? undefined : MIN_PASSWORD_LENGTH}
+                  className="w-full min-w-0 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-xs font-bold text-slate-900 dark:text-white outline-none focus:border-purple-600 transition-colors font-mono"
+                />
+                <button
+                  type="button"
+                  onClick={handleGeneratePassword}
+                  className="shrink-0 px-3 rounded-xl bg-purple-50 dark:bg-slate-800 border border-purple-200 dark:border-slate-700 text-purple-700 dark:text-purple-300 text-[11px] font-extrabold cursor-pointer"
+                >
+                  Generar
+                </button>
+              </div>
               <p className="text-[10px] text-slate-400 leading-tight">
-                PIN de acceso asignado fijado por el Superadmin para ingresar por correo sin contraseñas estáticas.
+                Mínimo {MIN_PASSWORD_LENGTH} caracteres. Cópialo y entrégalo por un canal privado (no en grupos).
               </p>
             </div>
 
@@ -228,6 +253,11 @@ export const AdminUserFormModal: React.FC<AdminUserFormModalProps> = ({
                     setPermisoCuadernillos(true);
                     setPermisoRecursos(true);
                     setPermisoMetricas(true);
+                  } else if (selectedRole === 'REGISTRADOR') {
+                    setPermisoUsuarios(true);
+                    setPermisoCuadernillos(false);
+                    setPermisoRecursos(false);
+                    setPermisoMetricas(false);
                   } else if (selectedRole === 'GESTOR_LICENCIAS') {
                     setPermisoUsuarios(true);
                     setPermisoCuadernillos(false);
@@ -255,6 +285,7 @@ export const AdminUserFormModal: React.FC<AdminUserFormModalProps> = ({
                 <option value="ADMINISTRADOR">ADMINISTRADOR (GESTOR GENERAL)</option>
                 <option value="SUPERADMINISTRADOR">SUPERADMINISTRADOR (ACCESO TOTAL Y EQUIPO)</option>
                 <option value="GESTOR_LICENCIAS">GESTOR DE LICENCIAS (USUARIOS Y SUSCRIPCIONES)</option>
+                <option value="REGISTRADOR">REGISTRADOR (SOLO AGREGA SUS DOCENTES · EDICIÓN 14 DÍAS)</option>
                 <option value="GESTOR_CUADERNILLOS">GESTOR DE CUADERNILLOS (ESPECIALISTA MINEDU)</option>
                 <option value="GESTOR_RECURSOS">GESTOR DE RECURSOS (MATERIALES Y DIDÁCTICA)</option>
                 <option value="AUDITOR_SAAS">AUDITOR Y ANALISTA SAAS (MÉTRICAS E INDICADORES)</option>

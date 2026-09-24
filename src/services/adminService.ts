@@ -11,7 +11,9 @@ export type ActionResponse<T> =
   | { success: false; error: { code: string; message: string } };
 
 import { OFFICIAL_ADMIN_ACCOUNTS, AdminAccount } from '@/data/adminAccounts';
-import { requireAdminSession, setServerSession } from '@/lib/serverSession';
+import { REGISTRADOR_ROLE, requireActiveAdminSession, setServerSession } from '@/lib/serverSession';
+import { checkAdminRoleAssignment, createAttemptLimiter, validateAdminPassword } from '@/lib/adminPolicy';
+import { headers } from 'next/headers';
 import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 
 function hashSecret(value: string): string {
@@ -29,6 +31,48 @@ function verifySecret(value: string, stored: string): boolean {
 }
 
 export type { AdminAccount };
+
+// Solo el Superadministrador puede crear, editar o eliminar superadministradores y registradores.
+async function checkRoleAssignmentForTarget(actorRole: string, requestedRole?: string, targetId?: string): Promise<string | null> {
+  let targetRole: string | null = null;
+  if (targetId) {
+    const target = await prisma.adminUser.findUnique({ where: { id: targetId }, select: { rol: true } });
+    targetRole = target?.rol ?? null;
+  }
+  return checkAdminRoleAssignment(actorRole, requestedRole, targetRole);
+}
+
+// 5 intentos fallidos por cuenta y 20 por IP cada 15 minutos (memoria de la instancia).
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const loginFailuresByAccount = createAttemptLimiter(5, LOGIN_WINDOW_MS);
+const loginFailuresByIp = createAttemptLimiter(20, LOGIN_WINDOW_MS);
+
+function getClientIp(): string {
+  try {
+    const forwarded = headers().get('x-forwarded-for') || headers().get('x-real-ip') || '';
+    return forwarded.split(',')[0].trim() || 'unknown';
+  } catch {
+    return 'unknown';
+  }
+}
+
+function resolveAdminPermissions(dbAdmin: {
+  rol: string;
+  permisoUsuarios: boolean;
+  permisoCuadernillos: boolean;
+  permisoRecursos: boolean;
+  permisoMetricas: boolean;
+}) {
+  if (dbAdmin.rol === REGISTRADOR_ROLE) {
+    return { usuarios: true, cuadernillos: false, recursos: false, metricas: false };
+  }
+  return {
+    usuarios: dbAdmin.permisoUsuarios,
+    cuadernillos: dbAdmin.permisoCuadernillos,
+    recursos: dbAdmin.permisoRecursos,
+    metricas: dbAdmin.permisoMetricas,
+  };
+}
 
 export interface AdminUserItem {
   id: string;
@@ -83,7 +127,7 @@ const INITIAL_ADMIN_ACCOUNTS: AdminUserItem[] = [
 
 export async function getOfficialAdminAccountsAction(): Promise<ActionResponse<AdminAccount[]>> {
   try {
-    requireAdminSession();
+    await requireActiveAdminSession();
     return { success: true, data: OFFICIAL_ADMIN_ACCOUNTS.map(({ userOrEmail, name, role }) => ({ userOrEmail, name, role, passOrPin: [] })) };
   } catch {
     return { success: false, error: { code: 'UNAUTHORIZED', message: 'Acceso denegado.' } };
@@ -95,7 +139,7 @@ export async function getOfficialAdminAccountsAction(): Promise<ActionResponse<A
  */
 export async function getAdminUsersAction(): Promise<ActionResponse<AdminUserItem[]>> {
   try {
-    requireAdminSession('usuarios');
+    await requireActiveAdminSession('usuarios');
     const dbAdmins = await prisma.adminUser.findMany({
       where: {
         AND: [
@@ -145,11 +189,15 @@ export async function createAdminUserAction(data: {
   creadoPor?: string;
 }): Promise<ActionResponse<{ id: string }>> {
   try {
-    requireAdminSession('usuarios');
+    const actor = await requireActiveAdminSession('usuarios');
+    const roleError = await checkRoleAssignmentForTarget(actor.role, data.rol);
+    if (roleError) return { success: false, error: { code: 'FORBIDDEN', message: roleError } };
     const cleanNombre = (data.nombre || '').trim();
     const cleanEmail = (data.email || '').trim().toLowerCase();
     const cleanUsuario = (data.usuario || '').trim().toLowerCase();
-    const cleanPassword = (data.password || 'Admin2026!').trim();
+    const passwordError = validateAdminPassword(data.password);
+    if (passwordError) return { success: false, error: { code: 'WEAK_PASSWORD', message: passwordError } };
+    const cleanPassword = (data.password || '').trim();
 
     if (!cleanNombre || !cleanEmail || !cleanUsuario) {
       return { success: false, error: { code: 'INVALID_INPUT', message: 'Ingresa nombre, correo y usuario.' } };
@@ -163,10 +211,10 @@ export async function createAdminUserAction(data: {
         password: hashSecret(cleanPassword),
         rol: data.rol || 'ADMINISTRADOR',
         estado: 'ACTIVO',
-        permisoUsuarios: Boolean(data.permisoUsuarios ?? true),
-        permisoCuadernillos: Boolean(data.permisoCuadernillos ?? true),
-        permisoRecursos: Boolean(data.permisoRecursos ?? true),
-        permisoMetricas: Boolean(data.permisoMetricas ?? true),
+        permisoUsuarios: data.rol === REGISTRADOR_ROLE ? true : Boolean(data.permisoUsuarios ?? true),
+        permisoCuadernillos: data.rol === REGISTRADOR_ROLE ? false : Boolean(data.permisoCuadernillos ?? true),
+        permisoRecursos: data.rol === REGISTRADOR_ROLE ? false : Boolean(data.permisoRecursos ?? true),
+        permisoMetricas: data.rol === REGISTRADOR_ROLE ? false : Boolean(data.permisoMetricas ?? true),
         creadoPor: data.creadoPor || 'Superadministrador AVEND',
         modificadoPor: data.creadoPor || 'Superadministrador AVEND',
       },
@@ -199,7 +247,13 @@ export async function updateAdminUserAction(
   }
 ): Promise<ActionResponse<{ id: string }>> {
   try {
-    requireAdminSession('usuarios');
+    const actor = await requireActiveAdminSession('usuarios');
+    const roleError = await checkRoleAssignmentForTarget(actor.role, data.rol, id);
+    if (roleError) return { success: false, error: { code: 'FORBIDDEN', message: roleError } };
+    if (data.password) {
+      const passwordError = validateAdminPassword(data.password);
+      if (passwordError) return { success: false, error: { code: 'WEAK_PASSWORD', message: passwordError } };
+    }
     const updated = await prisma.adminUser.update({
       where: { id },
       data: {
@@ -229,7 +283,9 @@ export async function updateAdminUserAction(
  */
 export async function deleteAdminUserAction(id: string): Promise<ActionResponse<{ id: string }>> {
   try {
-    requireAdminSession('usuarios');
+    const actor = await requireActiveAdminSession('usuarios');
+    const roleError = await checkRoleAssignmentForTarget(actor.role, undefined, id);
+    if (roleError) return { success: false, error: { code: 'FORBIDDEN', message: roleError } };
     await prisma.adminUser.delete({ where: { id } });
     return { success: true, data: { id } };
   } catch (error: any) {
@@ -257,21 +313,38 @@ export async function verifyAdminCredentialsAction(
   try {
     const cleanUser = (userOrEmail || '').trim().toLowerCase();
     const cleanPass = (passOrPin || '').trim();
+    const invalidCredentials = {
+      success: false as const,
+      error: {
+        code: 'INVALID_CREDENTIALS',
+        message: 'Credenciales o Código de Acceso Asignado incorrecto. Revisa correo y clave.',
+      },
+    };
 
-    // 1. Probar contra base de datos PostgreSQL filtrando estrictamente por usuario/email si se proporciona
+    // El usuario/correo es obligatorio: nunca se autentica solo con la contraseña.
+    if (!cleanUser || !cleanPass) return invalidCredentials;
+
+    const clientIp = getClientIp();
+    if (loginFailuresByAccount.isBlocked(cleanUser) || loginFailuresByIp.isBlocked(clientIp)) {
+      return {
+        success: false,
+        error: { code: 'TOO_MANY_ATTEMPTS', message: 'Demasiados intentos fallidos. Espera 15 minutos antes de volver a intentarlo.' },
+      };
+    }
+
+    // 1. Probar contra base de datos PostgreSQL filtrando estrictamente por usuario/email
     try {
-      const whereClause: any = { estado: 'ACTIVO' };
-      if (cleanUser) {
-        whereClause.OR = [{ email: cleanUser }, { usuario: cleanUser }];
-      }
-
-      const dbAdmin = await prisma.adminUser.findFirst({ where: whereClause });
+      const dbAdmin = await prisma.adminUser.findFirst({
+        where: { estado: 'ACTIVO', OR: [{ email: cleanUser }, { usuario: cleanUser }] },
+      });
 
       if (dbAdmin && verifySecret(cleanPass, dbAdmin.password)) {
+        loginFailuresByAccount.reset(cleanUser);
         if (!dbAdmin.password.startsWith('scrypt$')) {
           await prisma.adminUser.update({ where: { id: dbAdmin.id }, data: { password: hashSecret(cleanPass) } });
         }
-        setServerSession({ sub: dbAdmin.id, email: dbAdmin.email, role: dbAdmin.rol, permissions: { usuarios: dbAdmin.permisoUsuarios, cuadernillos: dbAdmin.permisoCuadernillos, recursos: dbAdmin.permisoRecursos, metricas: dbAdmin.permisoMetricas } });
+        const permissions = resolveAdminPermissions(dbAdmin);
+        setServerSession({ sub: dbAdmin.id, email: dbAdmin.email, role: dbAdmin.rol, permissions });
         return {
           success: true,
           data: {
@@ -279,24 +352,25 @@ export async function verifyAdminCredentialsAction(
             name: dbAdmin.nombre,
             email: dbAdmin.email,
             role: dbAdmin.rol,
-            permisoUsuarios: dbAdmin.permisoUsuarios ?? true,
-            permisoCuadernillos: dbAdmin.permisoCuadernillos ?? true,
-            permisoRecursos: dbAdmin.permisoRecursos ?? true,
-            permisoMetricas: dbAdmin.permisoMetricas ?? true,
+            permisoUsuarios: permissions.usuarios,
+            permisoCuadernillos: permissions.cuadernillos,
+            permisoRecursos: permissions.recursos,
+            permisoMetricas: permissions.metricas,
           },
         };
       }
     } catch {}
 
     // 2. Probar coincidencia por correo específico en cuentas oficiales
-    if (cleanUser) {
+    {
       const matchedByEmail = OFFICIAL_ADMIN_ACCOUNTS.find(
         (acc) =>
           acc.userOrEmail.map((u) => u.toLowerCase()).includes(cleanUser) &&
           acc.passOrPin.includes(cleanPass)
       );
 
-        if (matchedByEmail) {
+      if (matchedByEmail) {
+        loginFailuresByAccount.reset(cleanUser);
         const matchedAccount = INITIAL_ADMIN_ACCOUNTS.find(
           (acc) => acc.email.toLowerCase() === matchedByEmail.userOrEmail[0].toLowerCase()
         );
@@ -318,39 +392,9 @@ export async function verifyAdminCredentialsAction(
       }
     }
 
-    // 3. Fallback a cuentas oficiales por PIN único si no se proveyó correo específico
-    const matchedOfficial = OFFICIAL_ADMIN_ACCOUNTS.find((acc) =>
-      acc.passOrPin.includes(cleanPass)
-    );
-
-    if (matchedOfficial) {
-      const matchedAccount = INITIAL_ADMIN_ACCOUNTS.find(
-        (acc) => acc.email.toLowerCase() === matchedOfficial.userOrEmail[0].toLowerCase()
-      );
-
-      setServerSession({ sub: matchedAccount?.id || 'official-admin', email: matchedOfficial.userOrEmail[0], role: matchedOfficial.role, permissions: { usuarios: true, cuadernillos: true, recursos: true, metricas: true } });
-      return {
-        success: true,
-        data: {
-          token: `admin_session_${Date.now()}_${matchedOfficial.name.replace(/\s+/g, '_').toLowerCase()}`,
-          name: matchedOfficial.name,
-          email: matchedOfficial.userOrEmail[0],
-          role: matchedOfficial.role,
-          permisoUsuarios: matchedAccount ? matchedAccount.permisoUsuarios : true,
-          permisoCuadernillos: matchedAccount ? matchedAccount.permisoCuadernillos : true,
-          permisoRecursos: matchedAccount ? matchedAccount.permisoRecursos : true,
-          permisoMetricas: matchedAccount ? matchedAccount.permisoMetricas : true,
-        },
-      };
-    }
-
-    return {
-      success: false,
-      error: {
-        code: 'INVALID_CREDENTIALS',
-        message: 'Credenciales o Código de Acceso Asignado incorrecto. Revisa correo y clave.',
-      },
-    };
+    loginFailuresByAccount.registerFailure(cleanUser);
+    loginFailuresByIp.registerFailure(clientIp);
+    return invalidCredentials;
   } catch (error: any) {
     return {
       success: false,
@@ -399,7 +443,7 @@ export async function checkIsAdminEmailAction(email: string): Promise<{ isAdmin:
  */
 export async function verifyAdminSession(): Promise<boolean> {
   try {
-    requireAdminSession();
+    await requireActiveAdminSession();
     return true;
   } catch {
     return false;
@@ -411,7 +455,7 @@ export async function verifyAdminSession(): Promise<boolean> {
  */
 export async function getAdminEvaluacionesAction(): Promise<ActionResponse<Evaluacion[]>> {
   try {
-    requireAdminSession('cuadernillos');
+    await requireActiveAdminSession('cuadernillos');
 
     try {
       const dbEvaluations = await prisma.evaluation.findMany({
@@ -480,7 +524,7 @@ export async function createEvaluationAction(
   input: CreateEvaluationInput
 ): Promise<ActionResponse<Evaluacion>> {
   try {
-    requireAdminSession('cuadernillos');
+    await requireActiveAdminSession('cuadernillos');
 
     const newEval: Evaluacion = {
       id: `eval-${Date.now()}`,
@@ -519,7 +563,7 @@ export async function createEvaluationAction(
  */
 export async function deleteEvaluationAction(id: string): Promise<ActionResponse<{ deletedId: string }>> {
   try {
-    requireAdminSession('cuadernillos');
+    await requireActiveAdminSession('cuadernillos');
 
     const index = MOCK_EVALUACIONES.findIndex((item) => item.id === id);
     if (index !== -1) {
@@ -544,7 +588,7 @@ export async function generateR2UploadUrlAction(
   contentType: string = 'application/pdf'
 ): Promise<ActionResponse<{ uploadUrl: string; key: string }>> {
   try {
-    requireAdminSession('cuadernillos');
+    await requireActiveAdminSession('cuadernillos');
 
     const sanitizeName = fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
     const key = `evaluations/${Date.now()}_${sanitizeName}`;

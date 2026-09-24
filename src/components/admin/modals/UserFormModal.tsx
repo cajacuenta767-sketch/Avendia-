@@ -21,6 +21,8 @@ export interface UserFormModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (data: UserFormData) => void;
+  /** Oculta la sección de vigencia (el REGISTRADOR no define fechas de licencia). */
+  hideVigencia?: boolean;
 }
 
 import {
@@ -65,6 +67,7 @@ const calculateEndDate = (startDateStr: string, option: '1_year' | '1_month' | '
 export const UserFormModal: React.FC<UserFormModalProps> = ({
   isOpen,
   onClose,
+  hideVigencia = false,
   onSubmit,
 }) => {
   const [fullName, setFullName] = useState('');
@@ -510,6 +513,7 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
             </div>
 
             {/* 1. SECCIÓN: INFORMACIÓN DE SUSCRIPCIÓN */}
+            {!hideVigencia && (
             <div className="bg-slate-50/80 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/80 rounded-2xl p-4 space-y-4">
               <div className="flex items-center space-x-2 text-indigo-600 dark:text-indigo-400 font-extrabold text-xs uppercase tracking-wider">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -561,6 +565,7 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
                 </div>
               </div>
             </div>
+            )}
 
             {/* 2. SECCIÓN: TIPO DE ACCESO* */}
             <div className="bg-slate-50/80 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/80 rounded-2xl p-4 space-y-3">
