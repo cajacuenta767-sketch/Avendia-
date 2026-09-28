@@ -429,7 +429,8 @@ export function checkDocenteSpecialtyAccess(
     .replace(/No Aplica\s*[-•]?\s*/gi, '')
     .trim();
 
-  const evaluationLabel = `${evalMod} - ${evalNiv}${evalAreaClean && !evalAreaClean.toLowerCase().includes('no aplica') && evalAreaClean.toLowerCase() !== evalNiv.toLowerCase() ? ` - ${evalAreaClean}` : ''}`;
+  const evalNivLabel = evalNiv && evalNiv !== 'NO_APLICA' ? ` - ${evalNiv}` : '';
+  const evaluationLabel = `${evalMod}${evalNivLabel}${evalAreaClean && !evalAreaClean.toLowerCase().includes('no aplica') && evalAreaClean.toLowerCase() !== evalNiv.toLowerCase() ? ` - ${evalAreaClean}` : ''}`;
 
   const evalTitleNorm = String((evaluacion as any).titulo || '').toLowerCase();
   const evalTipoCuadernilloNorm = String((evaluacion as any).tipoCuadernillo || '').toLowerCase();
@@ -447,16 +448,31 @@ export function checkDocenteSpecialtyAccess(
     return { hasAccess: true, docenteAreas: areas, evaluationLabel };
   }
 
+  // Coincidencia directa por modalidad de clasificación única (EBE / CETPRO)
+  const docModPrincipal = String(docenteSession?.modalidad || '').trim().toUpperCase();
+  if ((evalMod === 'EBE' || evalMod === 'CETPRO') && docModPrincipal === evalMod) {
+    return { hasAccess: true, docenteAreas: areas.length > 0 ? areas : [evalMod], evaluationLabel };
+  }
+
   // Comprobar coincidencia con las áreas asignadas al docente
   const hasMatch = areas.some((docArea) => {
     const cleanDocArea = String(docArea || '').trim();
     if (!cleanDocArea) return false;
 
     const cleanDocAreaUpper = cleanDocArea.toUpperCase();
+
+    // Modalidades de clasificación única (EBE / CETPRO)
+    if (evalMod === 'EBE' || evalMod === 'CETPRO') {
+      return cleanDocAreaUpper.includes(evalMod);
+    }
+
     const parts = cleanDocArea.split(' - ').map((p) => (p || '').trim());
 
     if (parts.length < 2) {
       // Coincidencia por texto simple
+      if (evalNiv === 'NO_APLICA') {
+        return cleanDocAreaUpper.includes(evalMod);
+      }
       return cleanDocAreaUpper.includes(evalMod) && cleanDocAreaUpper.includes(evalNiv);
     }
 
