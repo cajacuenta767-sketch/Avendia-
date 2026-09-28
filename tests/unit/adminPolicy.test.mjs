@@ -50,10 +50,11 @@ test('solo el superadmin gestiona superadministradores y registradores', () => {
   assert.equal(checkAdminRoleAssignment('ADMINISTRADOR', 'GESTOR_LICENCIAS', 'ADMINISTRADOR'), null);
 });
 
-test('contraseñas de administrador: mínimo 10 caracteres', () => {
+test('contraseñas de administrador: mínimo 6 caracteres', () => {
   assert.notEqual(validateAdminPassword(''), null);
-  assert.notEqual(validateAdminPassword('202601'), null);
+  assert.notEqual(validateAdminPassword('12345'), null);
   assert.notEqual(validateAdminPassword('   abc   '), null);
+  assert.equal(validateAdminPassword('202601'), null);
   assert.equal(validateAdminPassword('Kx7mPq2wZr9t'), null);
 });
 

@@ -8,7 +8,7 @@ export const ADMIN_ROLES = ['ADMIN', 'ADMINISTRADOR', 'SUPERADMINISTRADOR', 'GES
 
 export const DAY_MS = 24 * 60 * 60 * 1000;
 export const REGISTRADOR_EDIT_WINDOW_MS = 14 * DAY_MS;
-export const MIN_ADMIN_PASSWORD_LENGTH = 10;
+export const MIN_ADMIN_PASSWORD_LENGTH = 6;
 
 export function hasAdminRole(role: string): boolean {
   return (ADMIN_ROLES as readonly string[]).includes(role);

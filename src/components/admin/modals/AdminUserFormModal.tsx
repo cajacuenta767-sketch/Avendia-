@@ -3,6 +3,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { createAdminUserAction, updateAdminUserAction, AdminUserItem } from '@/services/adminService';
+import { MIN_ADMIN_PASSWORD_LENGTH } from '@/lib/adminPolicy';
 
 interface AdminUserFormModalProps {
   isOpen: boolean;
@@ -64,7 +65,7 @@ export const AdminUserFormModal: React.FC<AdminUserFormModalProps> = ({
 
   if (!isOpen) return null;
 
-  const MIN_PASSWORD_LENGTH = 10;
+  const MIN_PASSWORD_LENGTH = MIN_ADMIN_PASSWORD_LENGTH;
 
   // Genera un código aleatorio de 12 caracteres sin símbolos ambiguos (0/O, 1/l/I).
   const handleGeneratePassword = () => {
@@ -222,7 +223,7 @@ export const AdminUserFormModal: React.FC<AdminUserFormModalProps> = ({
                   type="text"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder={adminToEdit ? 'Dejar vacío para no cambiar' : 'Mínimo 10 caracteres'}
+                  placeholder={adminToEdit ? 'Dejar vacío para no cambiar' : `Mínimo ${MIN_PASSWORD_LENGTH} caracteres`}
                   minLength={adminToEdit ? undefined : MIN_PASSWORD_LENGTH}
                   className="w-full min-w-0 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-xs font-bold text-slate-900 dark:text-white outline-none focus:border-purple-600 transition-colors font-mono"
                 />
