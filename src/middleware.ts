@@ -6,9 +6,9 @@ export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const host = req.headers.get('host') || req.nextUrl.host || '';
 
-  // Redirección 301 Permanente: Si entra por mundoavend.com o cuadernillos.avend.pe (plural) -> redirigir a cuadernillo.avend.pe (oficial)
-  if (host.includes('mundoavend.com') || host.startsWith('cuadernillos.avend.pe')) {
-    const redirectUrl = new URL(pathname + req.nextUrl.search, 'https://cuadernillo.avend.pe');
+  // Redirección 301 Permanente: Si entra por mundoavend.com -> redirigir a cuadernillos.avend.pe
+  if (host.includes('mundoavend.com')) {
+    const redirectUrl = new URL(pathname + req.nextUrl.search, 'https://cuadernillos.avend.pe');
     return NextResponse.redirect(redirectUrl, { status: 301 });
   }
 

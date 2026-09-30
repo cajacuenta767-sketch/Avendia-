@@ -280,11 +280,8 @@ export async function GET(req: NextRequest) {
     // 4. Si el archivo no está en disco local, intentar sincronizar desde Producción Remota
     try {
       const prodCandidates = [
-        `https://cuadernillo.avend.pe/uploads/cuadernillos/${filename}`,
         `https://cuadernillos.avend.pe/uploads/cuadernillos/${filename}`,
-        `https://cuadernillo.avend.pe/uploads/recursos/${filename}`,
         `https://cuadernillos.avend.pe/uploads/recursos/${filename}`,
-        `https://cuadernillo.avend.pe/${decodedLocalPath}`,
         `https://cuadernillos.avend.pe/${decodedLocalPath}`,
       ];
 

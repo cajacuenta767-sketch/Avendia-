@@ -53,7 +53,7 @@ Ingresa estos 4 dígitos en la plataforma para confirmar tu identidad y acceder 
 
 Atentamente,
 Equipo AVEND ESCALA
-https://cuadernillo.avend.pe`;
+https://cuadernillos.avend.pe`;
 
     // 2. Versión en HTML Profesional y Optimizado
     const htmlContent = `

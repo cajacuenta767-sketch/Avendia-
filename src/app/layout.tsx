@@ -6,13 +6,11 @@ import './globals.css';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://cuadernillo.avend.pe'),
+  metadataBase: new URL('https://cuadernillos.avend.pe'),
   title: 'AVEND ESCALA - Banco de Evaluaciones y Recursos MINEDU',
   description:
     'Plataforma oficial para docentes de descarga de cuadernillos, resoluciones, claves y recursos didácticos del Ministerio de Educación del Perú.',
   keywords: [
-    'cuadernillo avend pe',
-    'cuadernillo.avend.pe',
     'cuadernillos avend pe',
     'cuadernillos.avend.pe',
     'avend escala',
@@ -23,13 +21,13 @@ export const metadata: Metadata = {
     'banco de cuadernillos',
   ],
   alternates: {
-    canonical: 'https://cuadernillo.avend.pe',
+    canonical: 'https://cuadernillos.avend.pe',
   },
   openGraph: {
     title: 'AVEND ESCALA - Banco de Evaluaciones y Recursos MINEDU',
     description:
       'Plataforma oficial para docentes de descarga de cuadernillos, resoluciones, claves y recursos didácticos del Ministerio de Educación del Perú.',
-    url: 'https://cuadernillo.avend.pe',
+    url: 'https://cuadernillos.avend.pe',
     siteName: 'AVEND ESCALA',
     locale: 'es_PE',
     type: 'website',
