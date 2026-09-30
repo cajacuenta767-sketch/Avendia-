@@ -69,6 +69,6 @@ export function getUserWhatsAppLink(phone: string, nombre: string, email: string
   const cleanDigits = (phone || '').replace(/[^0-9]/g, '');
   const phoneWithCountry = cleanDigits.length === 9 ? `51${cleanDigits}` : cleanDigits;
   const pinMsg = pin && pin.trim() !== '' ? `\nSu PIN de acceso es: *${pin.trim()}*` : '';
-  const message = `Hola docente ${nombre}, le saludamos de AVEND ESCALA. Su cuenta (${email}) se encuentra activa en: https://cuadernillos.avend.pe${pinMsg}\n\nExitos en su preparacion profesional.`;
+  const message = `Hola docente ${nombre}, le saludamos de AVEND ESCALA. Su cuenta (${email}) se encuentra activa en: https://cuadernillo.avend.pe${pinMsg}\n\nExitos en su preparacion profesional.`;
   return `https://wa.me/${phoneWithCountry}?text=${encodeURIComponent(message)}`;
 }

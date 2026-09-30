@@ -1,6 +1,6 @@
-﻿User-agent: *
+User-agent: *
 Allow: /
 Disallow: /admin
 Disallow: /api/
 
-Sitemap: https://cuadernillos.avend.pe/sitemap.xml
+Sitemap: https://cuadernillo.avend.pe/sitemap.xml
